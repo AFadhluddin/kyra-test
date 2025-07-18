@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncAttrs, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, synonym
-from sqlalchemy import String, ForeignKey, JSON, func, Text
+from sqlalchemy import String, ForeignKey, JSON, func, Text, Column, Integer, Float, DateTime
 
 from ..core.config import get_settings
 
@@ -49,7 +49,10 @@ class Message(Base):
 class UnansweredQuery(Base):
     __tablename__ = "unanswered_queries"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    text: Mapped[str] = mapped_column(Text)
-    location: Mapped[Optional[str]]
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    id         = Column(Integer, primary_key=True)
+    text       = Column(Text, nullable=False)
+    location   = Column(String, nullable=True)
+    reason     = Column(String, nullable=True)     # NEW
+    score      = Column(Float, nullable=True)      # NEW
+    created_at = Column(DateTime, default=datetime.utcnow)
+
