@@ -56,3 +56,5 @@ class UnansweredQuery(Base):
     score      = Column(Float, nullable=True)      # NEW
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    
+

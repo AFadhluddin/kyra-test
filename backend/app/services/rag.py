@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import openai
-from openai import OpenAI as _OpenAIClient
 from chromadb import PersistentClient
 from llama_index.core import Settings, VectorStoreIndex
 from llama_index.embeddings.openai import OpenAIEmbedding
@@ -19,14 +18,6 @@ from llama_index.vector_stores.chroma import ChromaVectorStore
 # --------------------------------------------------------------------------- #
 openai.api_key = os.getenv("OPENAI_API_KEY")
 SIM_THRESHOLD: float = 0.30  # minimum similarity to accept an answer
-_FALLBACK_SYSTEM_PROMPT = """
-You are a medical‑information assistant for the UK public (NHS tone of voice).
-• Answer **only** health‑ and medicine‑related questions.
-• If the user asks about something non‑medical (cars, law, coding, etc.),
-  respond exactly: "I’m sorry, I can’t help with that."
-• Keep answers concise (≤ 200 words) and cite NHS or Cancer Research UK
-  webpages if you know them, otherwise answer without sources.
-"""
 
 INDEX_DIR = (
     Path(__file__)
@@ -35,20 +26,6 @@ INDEX_DIR = (
     / "../rag/chroma_db"     # backend/rag/chroma_db
 ).resolve()
 
-_openai_client = _OpenAIClient(api_key=os.getenv("OPENAI_API_KEY"))
-
-def llm_fallback(query: str) -> str:
-    """Direct call to GPT‑4o‑mini with a strict system prompt."""
-    chat = _openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": _FALLBACK_SYSTEM_PROMPT.strip()},
-            {"role": "user", "content": query},
-        ],
-    )
-    return chat.choices[0].message.content.strip()
-    
 # --------------------------------------------------------------------------- #
 # Initialise Chroma‑powered query engine (loads once per worker)
 # --------------------------------------------------------------------------- #

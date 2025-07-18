@@ -8,14 +8,15 @@ from ...db.models import (
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from ...services.rag import answer, llm_fallback, SIM_THRESHOLD
+
 from ...services.auth import get_current_user
 from ...services.rag import answer
 from ...db.models import SessionLocal, ChatSession, Message
 
 FALLBACK_TXT = (
-    "I'm not sure about that yet – a clinician will review your question."
+    "Doesn't seem to be in knowledge base! My human team will review your question."
 )
+
 router = APIRouter()
 
 class ChatIn(BaseModel):
@@ -44,15 +45,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                 )
             )
             await db.commit()
-            
-            # NEW: ask GPT‑4o‑mini with guard‑rail prompt
-            llm_resp = llm_fallback(body.message)
-
-            # If the model refused, return standard fallback
-            if llm_resp.lower().startswith("i’m sorry") or score < SIM_THRESHOLD:
-                return {"response": FALLBACK_TXT, "sources": [], "from_cache": False}
-
-            return {"response": llm_resp, "sources": [], "from_cache": False}
+            return {"response": FALLBACK_TXT, "sources": [], "from_cache": False}
 
         # ---------- low‑similarity fallback ----------------------------------
         if response is None:
