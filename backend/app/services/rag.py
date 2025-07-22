@@ -278,42 +278,58 @@ def format_response_with_sources(
         return response, sources
     
     if metadata.get("used_rag", False) and sources:
-        # RAG was used - format with NHS/Cancer Research sources
+        # RAG was used - show NHS/Cancer Research sources in response text
         unique_sources = list(dict.fromkeys(sources))  # Remove duplicates while preserving order
-        formatted_sources = []
-        for source in unique_sources:
-            if "nhs.uk" in source.lower():
-                formatted_sources.append(f"NHS.uk - {source}")
-            elif "cancerresearchuk.org" in source.lower():
-                formatted_sources.append(f"Cancer Research UK - {source}")
-            else:
-                formatted_sources.append(source)
         
-        # Add source section to response
-        if formatted_sources:
-            response += f"\n\n**Sources (Kyra's Knowledge Base):**\n"
-            for source in formatted_sources:
-                response += f"- {source}\n"
+        # Add source section to response text
+        if unique_sources:
+            response += f"\n\n**Sources (NHS/Cancer Research UK Knowledge Base):**\n"
+            for source in unique_sources:
+                if source.startswith('http://') or source.startswith('https://'):
+                    # Make URLs clickable in markdown
+                    try:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(source)
+                        display_text = f"{parsed.netloc}{parsed.path}"
+                        if len(display_text) > 60:
+                            display_text = display_text[:57] + "..."
+                        response += f"- [{display_text}]({source})\n"
+                    except:
+                        response += f"- {source}\n"
+                else:
+                    response += f"- {source}\n"
         
         return response, unique_sources
     else:
         # No RAG used - GPT-4o should have included general sources
         gpt_sources = []
         
-        # Try to extract sources from GPT-4o response
+        # Try to extract sources from GPT-4o response and convert to clickable links
         if "Sources:" in response or "sources:" in response.lower():
             lines = response.split('\n')
             in_sources = False
-            for line in lines:
-                line = line.strip()
-                if line.lower().startswith('sources:'):
+            source_replacements = []
+            
+            for i, line in enumerate(lines):
+                line_stripped = line.strip()
+                if line_stripped.lower().startswith('sources:'):
                     in_sources = True
                     continue
-                if in_sources and line.startswith('-'):
-                    source_text = line[1:].strip()
+                if in_sources and line_stripped.startswith('-'):
+                    source_text = line_stripped[1:].strip()
                     gpt_sources.append(source_text)
-                elif in_sources and line and not line.startswith('-'):
+                    
+                    # Try to convert text sources to clickable links
+                    clickable_link = convert_text_source_to_link(source_text)
+                    if clickable_link != source_text:
+                        # Replace the original line with a clickable link
+                        source_replacements.append((line, f"- {clickable_link}"))
+                elif in_sources and line_stripped and not line_stripped.startswith('-'):
                     break
+            
+            # Apply source replacements to make them clickable
+            for old_line, new_line in source_replacements:
+                response = response.replace(old_line, new_line)
         
         # Remove duplicates from GPT-4o sources
         unique_gpt_sources = list(dict.fromkeys(gpt_sources)) if gpt_sources else []
@@ -323,9 +339,87 @@ def format_response_with_sources(
             # Replace the Sources section with clearer attribution
             response = response.replace("Sources:", "**Sources (General Medical Knowledge - GPT-4o):**")
         else:
-            response += f"\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
+            response += f"\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal NHS knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
         
         return response, unique_gpt_sources if unique_gpt_sources else sources
+
+def convert_text_source_to_link(source_text: str) -> str:
+    """
+    Convert text-based sources like 'NHS.uk - Leptospirosis' to clickable markdown links
+    """
+    source_lower = source_text.lower()
+    
+    # NHS sources
+    if 'nhs.uk' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            # Convert topic to URL-friendly format
+            topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
+            nhs_url = f"https://www.nhs.uk/conditions/{topic_slug}/"
+            return f"[{source_text}]({nhs_url})"
+        else:
+            return f"[{source_text}](https://www.nhs.uk/)"
+    
+    # Mayo Clinic sources
+    elif 'mayo clinic' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            # Convert topic to URL-friendly format
+            topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
+            mayo_url = f"https://www.mayoclinic.org/diseases-conditions/{topic_slug}/symptoms-causes/syc-20354349"
+            return f"[{source_text}]({mayo_url})"
+        else:
+            return f"[{source_text}](https://www.mayoclinic.org/)"
+    
+    # CDC sources
+    elif 'cdc' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            # Convert topic to URL-friendly format
+            topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
+            cdc_url = f"https://www.cdc.gov/leptospirosis/"
+            return f"[{source_text}]({cdc_url})"
+        else:
+            return f"[{source_text}](https://www.cdc.gov/)"
+    
+    # WebMD sources
+    elif 'webmd' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
+            webmd_url = f"https://www.webmd.com/a-to-z-guides/{topic_slug}"
+            return f"[{source_text}]({webmd_url})"
+        else:
+            return f"[{source_text}](https://www.webmd.com/)"
+    
+    # MedlinePlus sources
+    elif 'medlineplus' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            topic_slug = topic.lower().replace(' ', '').replace(',', '').replace('(', '').replace(')', '')
+            medline_url = f"https://medlineplus.gov/{topic_slug}.html"
+            return f"[{source_text}]({medline_url})"
+        else:
+            return f"[{source_text}](https://medlineplus.gov/)"
+    
+    # Cancer Research UK sources
+    elif 'cancer research' in source_lower or 'cancerresearchuk' in source_lower:
+        if '-' in source_text:
+            parts = source_text.split('-', 1)
+            topic = parts[1].strip() if len(parts) > 1 else ''
+            topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
+            cruk_url = f"https://www.cancerresearchuk.org/about-cancer/{topic_slug}"
+            return f"[{source_text}]({cruk_url})"
+        else:
+            return f"[{source_text}](https://www.cancerresearchuk.org/)"
+    
+    # If no pattern matches, return original text
+    return source_text
 
 # --------------------------------------------------------------------------- #
 # Main answer function

@@ -4,7 +4,7 @@ import ReactDOM from "react-dom/client";
 const API_BASE_URL = "http://localhost:8000/api/v1";
 
 // Enhanced markdown parser component
-function MarkdownText({ text }) {
+function MarkdownText({ text, onLinkClick }) {
   const parseMarkdown = (text) => {
     // First, escape HTML to prevent XSS
     const escapeHtml = (str) => {
@@ -32,18 +32,41 @@ function MarkdownText({ text }) {
     // Handle italic text
     text = text.replace(/(?<!\*)\*(?!\*)([^*]+)\*(?!\*)/g, '<em style="font-style: italic;">$1</em>');
 
-    // Handle links
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color: #3b82f6; text-decoration: underline;" target="_blank" rel="noopener noreferrer">$1</a>');
+    // Handle links (including sources) - convert to clickable buttons for modal
+    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, linkText, url) => {
+      const linkId = `link_${Math.random().toString(36).substr(2, 9)}`;
+      // Store the link handler in a global object
+      window.linkHandlers = window.linkHandlers || {};
+      window.linkHandlers[linkId] = () => onLinkClick && onLinkClick(url, linkText);
+      
+      return `<button onclick="window.linkHandlers['${linkId}']()" style="color: #3b82f6; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: none; border: none; cursor: pointer; padding: 0; font-size: inherit;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${linkText} <svg style="width: 12px; height: 12px; flex-shrink: 0;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button>`;
+    });
 
-    // Handle unordered lists
-    text = text.replace(/^[-*]\s+(.+)$/gm, '<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: disc;">$1</li>');
+    // Handle numbered lists (improved to handle sub-bullets)
+    text = text.replace(/^(\d+)\.\s+\*\*(.*?)\*\*:\s*([\s\S]*?)(?=\n\d+\.|\n\n|$)/gm, (match, num, title, content) => {
+      // Handle sub-bullets within numbered items
+      const processedContent = content.replace(/^-\s+(.+)$/gm, '<li style="margin-left: 16px; margin-bottom: 2px; list-style-type: disc; font-size: 14px;">$1</li>');
+      const hasSubBullets = processedContent.includes('<li');
+      
+      if (hasSubBullets) {
+        const wrappedSubBullets = processedContent.replace(/(<li[^>]*>.*<\/li>)/gs, '<ul style="margin: 4px 0; padding-left: 0;">$1</ul>');
+        return `<li style="margin-bottom: 12px; list-style-type: decimal;"><strong>${title}:</strong> ${wrappedSubBullets}</li>`;
+      } else {
+        return `<li style="margin-bottom: 12px; list-style-type: decimal;"><strong>${title}:</strong> ${content.trim()}</li>`;
+      }
+    });
+
+    // Handle regular numbered lists
+    text = text.replace(/^(\d+)\.\s+(.+)$/gm, '<li style="margin-bottom: 8px; list-style-type: decimal;">$2</li>');
+
+    // Handle unordered lists  
+    text = text.replace(/^[-*]\s+(.+)$/gm, '<li style="margin-bottom: 4px; list-style-type: disc;">$1</li>');
     
-    // Handle numbered lists
-    text = text.replace(/^\d+\.\s+(.+)$/gm, '<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: decimal;">$1</li>');
+    // Wrap consecutive numbered list items
+    text = text.replace(/(<li style="[^"]*list-style-type: decimal[^"]*">[^<]*<\/li>(?:\s*<li style="[^"]*list-style-type: decimal[^"]*">[^<]*<\/li>)*)/g, '<ol style="margin: 8px 0; padding-left: 24px;">$1</ol>');
     
-    // Wrap consecutive list items
-    text = text.replace(/(<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: disc;">[\s\S]*?<\/li>(?:\n<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: disc;">[\s\S]*?<\/li>)*)/g, '<ul style="margin: 8px 0; list-style-type: disc;">$1</ul>');
-    text = text.replace(/(<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: decimal;">[\s\S]*?<\/li>(?:\n<li style="margin-left: 24px; margin-bottom: 4px; list-style-type: decimal;">[\s\S]*?<\/li>)*)/g, '<ol style="margin: 8px 0; list-style-type: decimal;">$1</ol>');
+    // Wrap consecutive unordered list items  
+    text = text.replace(/(<li style="[^"]*list-style-type: disc[^"]*">[^<]*<\/li>(?:\s*<li style="[^"]*list-style-type: disc[^"]*">[^<]*<\/li>)*)/g, '<ul style="margin: 8px 0; padding-left: 24px;">$1</ul>');
 
     // Handle blockquotes
     text = text.replace(/^>\s+(.+)$/gm, '<blockquote style="border-left: 4px solid #d1d5db; padding-left: 16px; margin: 8px 0; font-style: italic; color: #6b7280;">$1</blockquote>');
@@ -57,6 +80,10 @@ function MarkdownText({ text }) {
 
     // Clean up empty paragraphs
     text = text.replace(/<p style="margin-bottom: 12px;"><\/p>/g, '');
+    
+    // Clean up paragraph tags around lists
+    text = text.replace(/<p style="margin-bottom: 12px;">(<[ou]l[^>]*>)/g, '$1');
+    text = text.replace(/(<\/[ou]l>)<\/p>/g, '$1');
 
     return text;
   };
@@ -94,6 +121,33 @@ async function apiRequest(endpoint, options = {}) {
 function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession, token, onSessionsReload }) {
   const [showSessions, setShowSessions] = useState(false);
 
+  async function deleteSession(sessionId, event) {
+    event.stopPropagation(); // Prevent session selection when clicking delete
+    
+    if (!confirm('Are you sure you want to delete this conversation? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await apiRequest(`/chat/session/${sessionId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // If we deleted the current session, clear the current session
+      if (currentSessionId === sessionId) {
+        // Reset to empty state
+        window.location.reload(); // Simple solution - refresh the page
+      } else {
+        // Just reload the sessions list
+        onSessionsReload();
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error);
+      alert('Failed to delete session. Please try again.');
+    }
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       <button
@@ -126,8 +180,8 @@ function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession
           border: '1px solid #e5e7eb',
           borderRadius: '8px',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-          minWidth: '250px',
-          maxHeight: '300px',
+          minWidth: '280px',
+          maxHeight: '400px',
           overflowY: 'auto',
           zIndex: 10,
           marginTop: '4px'
@@ -167,7 +221,11 @@ function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession
                     cursor: 'pointer',
                     backgroundColor: currentSessionId === session.id ? '#eff6ff' : 'transparent',
                     borderLeft: currentSessionId === session.id ? '3px solid #2563eb' : '3px solid transparent',
-                    marginBottom: '4px'
+                    marginBottom: '4px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    gap: '8px'
                   }}
                   onClick={() => {
                     onSessionSelect(session.id);
@@ -175,21 +233,46 @@ function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession
                   }}
                   onMouseEnter={(e) => {
                     if (currentSessionId !== session.id) {
-                      e.target.style.backgroundColor = '#f9fafb';
+                      e.currentTarget.style.backgroundColor = '#f9fafb';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (currentSessionId !== session.id) {
-                      e.target.style.backgroundColor = 'transparent';
+                      e.currentTarget.style.backgroundColor = 'transparent';
                     }
                   }}
                 >
-                  <div style={{ fontSize: '14px', color: '#111827', marginBottom: '4px' }}>
-                    {session.preview}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', color: '#111827', marginBottom: '4px' }}>
+                      {session.preview}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                      {new Date(session.created_at).toLocaleDateString()}
+                    </div>
                   </div>
-                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
-                    {new Date(session.created_at).toLocaleDateString()}
-                  </div>
+                  <button
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '4px',
+                      color: '#ef4444',
+                      borderRadius: '4px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: '24px',
+                      height: '24px'
+                    }}
+                    onClick={(e) => deleteSession(session.id, e)}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#fee2e2'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    title="Delete conversation"
+                  >
+                    <svg style={{width: '14px', height: '14px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
                 </div>
               ))
             )}
@@ -214,7 +297,46 @@ function Chat() {
   const [error, setError] = useState("");
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [modalUrl, setModalUrl] = useState("");
+  const [modalTitle, setModalTitle] = useState("");
   const chatEndRef = useRef(null);
+
+  function openInModal(url, title) {
+    // Extract a clean title from the URL if no title provided
+    let cleanTitle = title;
+    if (!cleanTitle || cleanTitle === url) {
+      try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname.replace('www.', '');
+        const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+        
+        if (hostname.includes('nhs.uk')) {
+          cleanTitle = pathSegments.length > 0 ? 
+            pathSegments[pathSegments.length - 1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 
+            'NHS Information';
+        } else if (hostname.includes('mayoclinic.org')) {
+          cleanTitle = pathSegments.length > 0 ? 
+            pathSegments[pathSegments.length - 1].replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 
+            'Mayo Clinic Information';
+        } else {
+          cleanTitle = hostname;
+        }
+      } catch (e) {
+        cleanTitle = 'Medical Information';
+      }
+    }
+    
+    setModalUrl(url);
+    setModalTitle(cleanTitle);
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setModalUrl("");
+    setModalTitle("");
+  }
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -417,15 +539,16 @@ function Chat() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '16px'
+      padding: '12px'  // Reduced padding from 16px to 12px for more space
     },
     card: {
       width: '100%',
-      maxWidth: '672px',
+      maxWidth: '900px',  // Increased from 672px to 900px for better use of screen space
       backgroundColor: 'white',
       borderRadius: '16px',
       boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      maxHeight: '95vh'  // Added max height to prevent overflow on small screens
     },
     loginContainer: {
       padding: '32px'
@@ -488,7 +611,7 @@ function Chat() {
     chatContainer: {
       display: 'flex',
       flexDirection: 'column',
-      height: '600px'
+      height: '85vh'  // Changed from '600px' to 85% of viewport height
     },
     header: {
       backgroundColor: 'white',
@@ -781,7 +904,7 @@ function Chat() {
                         }}>
                           {entry.type === 'kyra' ? (
                             <div>
-                              <MarkdownText text={entry.text} />
+                              <MarkdownText text={entry.text} onLinkClick={openInModal} />
                               {entry.sources && entry.sources.length > 0 && (
                                 <div style={{
                                   marginTop: '12px',
@@ -794,19 +917,70 @@ function Chat() {
                                     fontSize: '12px',
                                     fontWeight: '500',
                                     color: '#6b7280',
-                                    marginBottom: '4px'
+                                    marginBottom: '6px'
                                   }}>
                                     {entry.metadata?.used_rag ? 'NHS/Cancer Research Sources:' : 'General Medical Sources:'}
                                   </div>
-                                  {entry.sources.map((source, idx) => (
-                                    <div key={idx} style={{
-                                      fontSize: '11px',
-                                      color: '#374151',
-                                      marginBottom: '2px'
-                                    }}>
-                                      • {source}
-                                    </div>
-                                  ))}
+                                  {entry.sources.map((source, idx) => {
+                                    // Check if source is a URL or just text
+                                    const isUrl = source.startsWith('http://') || source.startsWith('https://');
+                                    
+                                    if (isUrl) {
+                                      // Extract domain for display text
+                                      let displayText = source;
+                                      try {
+                                        const url = new URL(source);
+                                        displayText = `${url.hostname}${url.pathname}`;
+                                        // Truncate long paths
+                                        if (displayText.length > 60) {
+                                          displayText = displayText.substring(0, 57) + '...';
+                                        }
+                                      } catch (e) {
+                                        // If URL parsing fails, use original source
+                                        displayText = source;
+                                      }
+                                      
+                                      return (
+                                        <div key={idx} style={{ marginBottom: '4px' }}>
+                                          <button
+                                            onClick={() => openInModal(source, displayText)}
+                                            style={{
+                                              fontSize: '11px',
+                                              color: '#3b82f6',
+                                              textDecoration: 'none',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              background: 'none',
+                                              border: 'none',
+                                              cursor: 'pointer',
+                                              padding: '2px 0'
+                                            }}
+                                            onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                            onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                                          >
+                                            <svg style={{width: '10px', height: '10px', flexShrink: 0}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                            </svg>
+                                            {displayText}
+                                          </button>
+                                        </div>
+                                      );
+                                    } else {
+                                      // Non-URL source (like formatted text from GPT-4o)
+                                      return (
+                                        <div key={idx} style={{
+                                          fontSize: '11px',
+                                          color: '#374151',
+                                          marginBottom: '4px',
+                                          paddingLeft: '14px' // Align with URL sources
+                                        }}>
+                                          • {source}
+                                        </div>
+                                      );
+                                    }
+                                  })}
                                 </div>
                               )}
                             </div>
@@ -867,6 +1041,252 @@ function Chat() {
           </div>
         )}
       </div>
+
+      {/* Side-by-side modal for viewing sources */}
+      {showModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          display: 'flex',
+          alignItems: 'stretch',
+          zIndex: 1000
+        }}>
+          {/* Chat side - compressed */}
+          <div style={{
+            width: '40%',
+            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}>
+            <div style={styles.card}>
+              <div style={styles.chatContainer}>
+                <div style={styles.header}>
+                  <div style={styles.headerLeft}>
+                    <div style={styles.avatar}>K</div>
+                    <div>
+                      <h1 style={{fontSize: '16px', fontWeight: '600', color: '#111827', margin: 0}}>Kyra</h1>
+                      <p style={{fontSize: '11px', color: '#6b7280', margin: 0}}>
+                        {currentSessionId ? `Session #${currentSessionId}` : 'Health Assistant'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={closeModal}
+                    style={{
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '6px',
+                      borderRadius: '6px',
+                      color: '#6b7280'
+                    }}
+                  >
+                    <svg style={{width: '16px', height: '16px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                
+                {/* Compressed chat area */}
+                <div style={{...styles.chatArea, padding: '12px 16px'}}>
+                  <div>
+                    {log.slice(-3).map((entry, i) => ( // Show only last 3 messages
+                      <div key={entry.id || i} style={{
+                        ...styles.messageContainer,
+                        justifyContent: entry.type === 'user' ? 'flex-end' : 'flex-start',
+                        marginBottom: '12px'
+                      }}>
+                        <div style={{...styles.messageContent, maxWidth: '85%'}}>
+                          {entry.type !== 'user' && (
+                            <div style={styles.messageHeader}>
+                              <div style={{...styles.avatar, ...styles.smallAvatar}}>K</div>
+                              <span style={{fontSize: '11px', color: '#6b7280', fontWeight: '500'}}>Kyra</span>
+                            </div>
+                          )}
+                          <div style={{
+                            ...styles.messageBubble,
+                            padding: '8px 12px',
+                            fontSize: '13px',
+                            ...(entry.type === 'user' ? styles.userMessage : styles.kyraMessage)
+                          }}>
+                            {entry.type === 'kyra' ? (
+                              <MarkdownText text={entry.text.substring(0, 300) + (entry.text.length > 300 ? '...' : '')} onLinkClick={openInModal} />
+                            ) : (
+                              <p style={{margin: 0}}>{entry.text}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {log.length > 3 && (
+                      <div style={{textAlign: 'center', fontSize: '12px', color: '#6b7280', marginBottom: '12px'}}>
+                        ... and {log.length - 3} more messages
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Source content side */}
+          <div style={{
+            width: '60%',
+            backgroundColor: 'white',
+            display: 'flex',
+            flexDirection: 'column',
+            borderLeft: '1px solid #e5e7eb'
+          }}>
+            {/* Header with clean title */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: '1px solid #e5e7eb',
+              backgroundColor: '#f9fafb'
+            }}>
+              <div>
+                <h3 style={{
+                  margin: 0,
+                  fontSize: '18px',
+                  fontWeight: '600',
+                  color: '#111827'
+                }}>
+                  {modalTitle}
+                </h3>
+                <p style={{
+                  margin: '4px 0 0 0',
+                  fontSize: '12px',
+                  color: '#6b7280'
+                }}>
+                  {new URL(modalUrl).hostname}
+                </p>
+              </div>
+              <button
+                onClick={closeModal}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '8px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+              >
+                <svg style={{width: '20px', height: '20px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            {/* Content area with fallback */}
+            <div style={{ flex: 1, position: 'relative', backgroundColor: '#f9fafb' }}>
+              <iframe
+                src={modalUrl}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                  backgroundColor: 'white'
+                }}
+                title={modalTitle}
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-top-navigation"
+                onError={() => {
+                  // Handle iframe loading errors
+                  const iframe = document.querySelector('iframe[src="' + modalUrl + '"]');
+                  if (iframe) {
+                    iframe.style.display = 'none';
+                    const errorDiv = document.createElement('div');
+                    errorDiv.innerHTML = `
+                      <div style="padding: 40px; text-align: center; color: #6b7280;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">🔒</div>
+                        <h3 style="margin: 0 0 8px 0; color: #111827;">Content Blocked</h3>
+                        <p style="margin: 0 0 20px 0;">This site prevents embedding for security reasons.</p>
+                        <button onclick="window.open('${modalUrl}', '_blank')" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer;">
+                          Open in New Tab
+                        </button>
+                      </div>
+                    `;
+                    iframe.parentNode.appendChild(errorDiv);
+                  }
+                }}
+              />
+              
+              {/* Fallback content for sites that block embedding */}
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                textAlign: 'center',
+                color: '#6b7280',
+                padding: '40px',
+                display: 'none'
+              }} id="fallback-content">
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+                <h3 style={{ margin: '0 0 8px 0', color: '#111827' }}>Content Blocked</h3>
+                <p style={{ margin: '0 0 20px 0' }}>This site prevents embedding for security reasons.</p>
+                <button
+                  onClick={() => window.open(modalUrl, '_blank')}
+                  style={{
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Open in New Tab
+                </button>
+              </div>
+            </div>
+            
+            {/* Footer */}
+            <div style={{
+              padding: '12px 20px',
+              borderTop: '1px solid #e5e7eb',
+              backgroundColor: '#f9fafb',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                Source: {modalUrl}
+              </div>
+              <button
+                onClick={() => window.open(modalUrl, '_blank')}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '6px 12px',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+              >
+                <svg style={{width: '12px', height: '12px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Open in New Tab
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

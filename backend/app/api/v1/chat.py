@@ -38,6 +38,8 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
     async with SessionLocal() as db:
         # ---------- Get or create chat session ---------------------------
         session = None
+        print(f"[DEBUG] Request session_id: {body.session_id}")
+        
         if body.session_id:
             # Try to get existing session
             result = await db.execute(
@@ -47,9 +49,11 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                 )
             )
             session = result.scalar_one_or_none()
+            print(f"[DEBUG] Found existing session: {session.id if session else 'None'}")
         
         if not session:
             # Create new session
+            print(f"[DEBUG] Creating new session")
             session = ChatSession(
                 user_id=user.id,
                 location=body.location
@@ -57,6 +61,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             db.add(session)
             await db.commit()
             await db.refresh(session)
+            print(f"[DEBUG] Created new session with ID: {session.id}")
         
         # ---------- Get conversation history for context ------------------
         # Get history BEFORE adding current message to build proper context
@@ -73,18 +78,24 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
         # Build conversation history for GPT-4o (existing messages only)
         conversation_history = []
         for msg in history_messages[-10:]:  # Use last 10 for context
+            role = "assistant" if msg.role == "assistant" else msg.role
             conversation_history.append({
-                "role": msg.role if msg.role != "assistant" else "assistant", 
+                "role": role, 
                 "content": msg.content
             })
         
         print(f"[DEBUG] Built conversation history with {len(conversation_history)} messages")
         if conversation_history:
-            print(f"[DEBUG] Last 3 messages in history:")
-            for i, msg in enumerate(conversation_history[-3:]):
+            print(f"[DEBUG] Conversation history details:")
+            for i, msg in enumerate(conversation_history):
                 print(f"  {i+1}. {msg['role']}: {msg['content'][:100]}...")
         else:
-            print(f"[DEBUG] No conversation history found")
+            print(f"[DEBUG] No conversation history found - history_messages length was {len(history_messages)}")
+            
+        # Additional debugging - print raw database messages
+        print(f"[DEBUG] Raw database messages:")
+        for i, msg in enumerate(history_messages):
+            print(f"  DB {i+1}. ID:{msg.id} Role:{msg.role} Content:{msg.content[:50]}...")
         
         # ---------- Save user message AFTER getting history ---------------
         user_message = Message(
