@@ -291,7 +291,7 @@ def format_response_with_sources(
         
         # Add source section to response
         if formatted_sources:
-            response += f"\n\n**Sources (NHS/Cancer Research UK Knowledge Base):**\n"
+            response += f"\n\n**Sources (Kyra's Knowledge Base):**\n"
             for source in formatted_sources:
                 response += f"- {source}\n"
         
@@ -323,7 +323,7 @@ def format_response_with_sources(
             # Replace the Sources section with clearer attribution
             response = response.replace("Sources:", "**Sources (General Medical Knowledge - GPT-4o):**")
         else:
-            response += f"\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal NHS knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
+            response += f"\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
         
         return response, unique_gpt_sources if unique_gpt_sources else sources
 
