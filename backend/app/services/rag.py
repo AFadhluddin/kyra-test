@@ -82,48 +82,113 @@ def is_medical_question(question: str) -> bool:
 # --------------------------------------------------------------------------- #
 # RAG retrieval function
 # --------------------------------------------------------------------------- #
-def get_rag_context(query: str) -> Tuple[Optional[str], float, List[str]]:
+# --------------------------------------------------------------------------- #
+# RAG retrieval function with exponential weighting
+# --------------------------------------------------------------------------- #
+def get_rag_context_weighted(
+    current_query: str, 
+    conversation_history: Optional[List[Dict[str, str]]] = None,
+    primary_weight: float = 0.8,
+    context_weight: float = 0.2
+) -> Tuple[Optional[str], float, List[str]]:
     """
-    Get RAG context without generating an answer.
-    Returns (context_text | None, similarity_score, sources)
+    Get RAG context using exponentially weighted queries.
+    Prioritizes the current question while considering recent context.
+    
+    Args:
+        current_query: The current user question
+        conversation_history: Recent conversation messages
+        primary_weight: Weight for current query (0.8 = 80% focus on current question)
+        context_weight: Weight for context query (0.2 = 20% focus on context)
+    
+    Returns:
+        (context_text | None, similarity_score, sources)
     """
+    print(f"[DEBUG] RAG: Using weighted approach - primary: {primary_weight}, context: {context_weight}")
+    
+    # Always search with current query first (primary search)
     try:
-        res = query_engine.query(query)
+        primary_res = query_engine.query(current_query)
+        print(f"[DEBUG] RAG: Primary search (current query only)")
     except Exception as exc:
         print(f"[DEBUG] RAG retrieval error: {exc}")
         return None, 0.0, []
     
-    # If nothing retrieved
-    if not res.source_nodes:
+    # If nothing retrieved from primary search
+    if not primary_res.source_nodes:
+        print(f"[DEBUG] RAG: No results from primary search")
         return None, 0.0, []
     
-    # Gather source URLs
+    primary_score = primary_res.source_nodes[0].score or 0.0
+    print(f"[DEBUG] RAG: Primary similarity '{current_query[:30]}…' = {primary_score:.3f}")
+    
+    # Build contextual query only if we have conversation history
+    contextual_score = 0.0
+    if conversation_history and len(conversation_history) > 0:
+        try:
+            # Build lightweight contextual query (last 2 messages max)
+            recent_context = []
+            for msg in conversation_history[-2:]:  # Only last 2 messages for context
+                recent_context.append(f"{msg['role']}: {msg['content']}")
+            
+            contextual_query = f"Context: {' | '.join(recent_context)} | Current: {current_query}"
+            print(f"[DEBUG] RAG: Contextual search with recent history")
+            
+            context_res = query_engine.query(contextual_query)
+            if context_res.source_nodes:
+                contextual_score = context_res.source_nodes[0].score or 0.0
+                print(f"[DEBUG] RAG: Contextual similarity = {contextual_score:.3f}")
+        except Exception as exc:
+            print(f"[DEBUG] RAG: Contextual search failed: {exc}")
+            contextual_score = 0.0
+    
+    # Calculate weighted similarity score
+    # This heavily favors the current question but considers context
+    final_score = (primary_weight * primary_score) + (context_weight * contextual_score)
+    print(f"[DEBUG] RAG: Weighted similarity = {final_score:.3f} (primary: {primary_score:.3f}, context: {contextual_score:.3f})")
+    
+    # Use primary search results for retrieval (current question focused)
     links: List[str] = [
         n.node.metadata.get("source", "")
-        for n in res.source_nodes
+        for n in primary_res.source_nodes
         if n.node.metadata.get("source")
     ]
     
     # Domain filter: only NHS / Cancer Research pages
     if not any(("nhs.uk" in url) or ("cancerresearchuk.org" in url) for url in links):
+        print(f"[DEBUG] RAG: No NHS/Cancer Research sources found")
         return None, 0.0, links
     
-    # Similarity score
-    score = res.source_nodes[0].score or 0.0
-    print(f"[DEBUG] RAG similarity '{query[:30]}…' = {score:.3f}")
+    # Check if weighted similarity is high enough
+    if final_score < SIM_THRESHOLD:
+        print(f"[DEBUG] RAG: Weighted similarity {final_score:.3f} below threshold {SIM_THRESHOLD}")
+        return None, final_score, links
     
-    # Check if similarity is high enough
-    if score < SIM_THRESHOLD:
-        return None, score, links
-    
-    # Extract context from retrieved nodes
+    # Extract context from primary search results (focused on current question)
     context_parts = []
-    for node in res.source_nodes:
-        if node.score and node.score >= SIM_THRESHOLD:
+    for node in primary_res.source_nodes:
+        if node.score and node.score >= (SIM_THRESHOLD * 0.8):  # Slightly lower threshold for individual nodes
             context_parts.append(node.node.text)
     
     context_text = "\n\n".join(context_parts) if context_parts else None
-    return context_text, score, links
+    return context_text, final_score, links
+
+def get_rag_context(query: str) -> Tuple[Optional[str], float, List[str]]:
+    """
+    Legacy function - now just calls the weighted version with current query only
+    """
+    # For backwards compatibility, extract just the current question if it's a contextual query
+    if "Current question:" in query:
+        # Extract just the current question part
+        parts = query.split("Current question:")
+        if len(parts) > 1:
+            current_query = parts[-1].strip()
+        else:
+            current_query = query
+    else:
+        current_query = query
+    
+    return get_rag_context_weighted(current_query)
 
 # --------------------------------------------------------------------------- #
 # GPT-4o conversation with optional RAG enhancement
@@ -313,14 +378,17 @@ def answer(
     if is_medical:
         print(f"[DEBUG] Getting RAG context for medical question...")
         try:
-            # Use the full contextual query for RAG retrieval to get better context
-            rag_context, rag_score, sources = get_rag_context(query)
+            # Use weighted RAG search - prioritize current question over context
+            rag_context, rag_score, sources = get_rag_context_weighted(
+                current_message, 
+                conversation_history
+            )
             if rag_context:
-                print(f"[DEBUG] Using RAG context (score: {rag_score:.3f})")
+                print(f"[DEBUG] Using RAG context (weighted score: {rag_score:.3f})")
                 print(f"[DEBUG] RAG context preview: {rag_context[:200]}...")
                 print(f"[DEBUG] Sources: {sources}")
             else:
-                print(f"[DEBUG] No suitable RAG context found (score: {rag_score:.3f})")
+                print(f"[DEBUG] No suitable RAG context found (weighted score: {rag_score:.3f})")
         except Exception as e:
             print(f"[DEBUG] RAG context error: {e}")
             # Continue without RAG context
