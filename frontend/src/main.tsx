@@ -90,6 +90,116 @@ async function apiRequest(endpoint, options = {}) {
   return data;
 }
 
+// Session list component
+function SessionList({ sessions, currentSessionId, onSessionSelect, onNewSession, token, onSessionsReload }) {
+  const [showSessions, setShowSessions] = useState(false);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        style={{
+          backgroundColor: 'transparent',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          cursor: 'pointer',
+          color: '#6b7280',
+          fontSize: '14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}
+        onClick={() => setShowSessions(!showSessions)}
+      >
+        <svg style={{width: '16px', height: '16px'}} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        Sessions
+      </button>
+      
+      {showSessions && (
+        <div style={{
+          position: 'absolute',
+          top: '100%',
+          right: '0',
+          backgroundColor: 'white',
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+          minWidth: '250px',
+          maxHeight: '300px',
+          overflowY: 'auto',
+          zIndex: 10,
+          marginTop: '4px'
+        }}>
+          <div style={{ padding: '8px' }}>
+            <button
+              style={{
+                width: '100%',
+                backgroundColor: '#2563eb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                padding: '8px 12px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                marginBottom: '8px'
+              }}
+              onClick={() => {
+                onNewSession();
+                setShowSessions(false);
+              }}
+            >
+              + New Conversation
+            </button>
+            
+            {sessions.length === 0 ? (
+              <p style={{ padding: '16px', color: '#6b7280', fontSize: '14px', textAlign: 'center', margin: 0 }}>
+                No previous conversations
+              </p>
+            ) : (
+              sessions.map((session) => (
+                <div
+                  key={session.id}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    backgroundColor: currentSessionId === session.id ? '#eff6ff' : 'transparent',
+                    borderLeft: currentSessionId === session.id ? '3px solid #2563eb' : '3px solid transparent',
+                    marginBottom: '4px'
+                  }}
+                  onClick={() => {
+                    onSessionSelect(session.id);
+                    setShowSessions(false);
+                  }}
+                  onMouseEnter={(e) => {
+                    if (currentSessionId !== session.id) {
+                      e.target.style.backgroundColor = '#f9fafb';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (currentSessionId !== session.id) {
+                      e.target.style.backgroundColor = 'transparent';
+                    }
+                  }}
+                >
+                  <div style={{ fontSize: '14px', color: '#111827', marginBottom: '4px' }}>
+                    {session.preview}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                    {new Date(session.created_at).toLocaleDateString()}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Chat() {
   const [token, setToken] = useState(null);
   const [email, setEmail] = useState("");
@@ -100,13 +210,67 @@ function Chat() {
   const [location, setLocation] = useState("");
   const [isSignUp, setIsSignUp] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingSession, setLoadingSession] = useState(false);
   const [error, setError] = useState("");
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [sessions, setSessions] = useState([]);
   const chatEndRef = useRef(null);
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [log]);
+
+  // Load sessions when user logs in and load the most recent session
+  useEffect(() => {
+    if (token) {
+      loadSessionsAndLatest();
+    }
+  }, [token]);
+
+  async function loadSessionsAndLatest() {
+    try {
+      const data = await apiRequest("/chat/sessions", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      console.log(`[DEBUG] Loaded ${data.length} sessions`);
+      setSessions(data);
+      
+      // Auto-load the most recent session if it exists
+      if (data.length > 0 && !currentSessionId) {
+        console.log(`[DEBUG] Auto-loading most recent session: ${data[0].id}`);
+        await loadSessionMessages(data[0].id);
+      }
+    } catch (error) {
+      console.error("Failed to load sessions:", error);
+    }
+  }
+
+  async function loadSessionMessages(sessionId) {
+    setLoadingSession(true);
+    try {
+      const messages = await apiRequest(`/chat/session/${sessionId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      // Convert API messages to log format, including sources and metadata
+      const convertedMessages = messages.map(msg => ({
+        text: msg.content,
+        type: msg.role === 'user' ? 'user' : 'kyra',
+        id: msg.id,
+        sources: msg.sources,
+        metadata: msg.response_metadata  // Changed from metadata to response_metadata
+      }));
+      
+      setLog(convertedMessages);
+      setCurrentSessionId(sessionId);
+    } catch (error) {
+      console.error("Failed to load session messages:", error);
+      setLog([{text: "Failed to load conversation history.", type: 'error'}]);
+    } finally {
+      setLoadingSession(false);
+    }
+  }
 
   async function login() {
     if (!email || !pw) {
@@ -123,7 +287,8 @@ function Chat() {
         body: JSON.stringify({ email, password: pw })
       });
       setToken(data.access_token);
-      setLog([{text: "Welcome back! You're now logged in.", type: 'kyra'}]);
+      // Don't show welcome message if we're going to load a session
+      // setLog([{text: "Welcome back! You're now logged in.", type: 'kyra'}]);
     } catch (error) {
       setError(error.response?.data?.message || "Login failed");
     } finally {
@@ -177,18 +342,61 @@ function Chat() {
     // Add user message immediately
     setLog((l) => [...l, {text: userMessage, type: 'user'}]);
     
+    console.log(`[DEBUG] Sending message with session_id: ${currentSessionId}`);
+    
     try {
       const data = await apiRequest("/chat", {
         method: "POST",
-        body: JSON.stringify({ message: userMessage, location }),
+        body: JSON.stringify({ 
+          message: userMessage, 
+          location,
+          session_id: currentSessionId  // This should be the existing session ID
+        }),
         headers: { Authorization: `Bearer ${token}` }
       });
-      setLog((l) => [...l, {text: data.response, type: 'kyra'}]);
+      
+      console.log(`[DEBUG] Response session_id: ${data.session_id}`);
+      
+      // Update current session ID if it was a new conversation
+      if (!currentSessionId) {
+        console.log(`[DEBUG] Setting new session_id: ${data.session_id}`);
+        setCurrentSessionId(data.session_id);
+        // Reload sessions to show the new one
+        const sessionsData = await apiRequest("/chat/sessions", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setSessions(sessionsData);
+      } else {
+        console.log(`[DEBUG] Continuing existing session: ${currentSessionId}`);
+        // Just reload sessions list to update previews
+        const sessionsData = await apiRequest("/chat/sessions", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setSessions(sessionsData);
+      }
+      
+      // Replace the entire log with the conversation history from the API
+      // This ensures we have the complete conversation with proper IDs, sources, and metadata
+      const convertedMessages = data.messages.map(msg => ({
+        text: msg.content,
+        type: msg.role === 'user' ? 'user' : 'kyra',
+        id: msg.id,
+        sources: msg.sources,
+        metadata: msg.response_metadata  // Changed from metadata to response_metadata
+      }));
+      
+      setLog(convertedMessages);
+      
     } catch (error) {
       setLog((l) => [...l, {text: error.response?.data?.message || "Failed to send message", type: 'error'}]);
     } finally {
       setLoading(false);
     }
+  }
+
+  function startNewSession() {
+    setCurrentSessionId(null);
+    setLog([]);
   }
 
   function logout() {
@@ -198,6 +406,8 @@ function Chat() {
     setPw("");
     setConfirmPw("");
     setError("");
+    setCurrentSessionId(null);
+    setSessions([]);
   }
 
   const styles = {
@@ -289,6 +499,11 @@ function Chat() {
       justifyContent: 'space-between'
     },
     headerLeft: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px'
+    },
+    headerRight: {
       display: 'flex',
       alignItems: 'center',
       gap: '12px'
@@ -478,29 +693,50 @@ function Chat() {
                 <div style={styles.avatar}>K</div>
                 <div>
                   <h1 style={{fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0}}>Kyra</h1>
-                  <p style={{fontSize: '12px', color: '#6b7280', margin: 0}}>Health Assistant</p>
+                  <p style={{fontSize: '12px', color: '#6b7280', margin: 0}}>
+                    {currentSessionId ? `Session #${currentSessionId}` : 'Health Assistant'}
+                  </p>
                 </div>
               </div>
-              <button 
-                style={{
-                  color: '#6b7280',
-                  padding: '6px 12px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  background: 'transparent',
-                  fontSize: '14px'
-                }}
-                onClick={logout}
-                onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
-                onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-              >
-                Logout
-              </button>
+              <div style={styles.headerRight}>
+                <SessionList 
+                  sessions={sessions}
+                  currentSessionId={currentSessionId}
+                  onSessionSelect={loadSessionMessages}
+                  onNewSession={startNewSession}
+                  token={token}
+                  onSessionsReload={loadSessionsAndLatest}
+                />
+                <button 
+                  style={{
+                    color: '#6b7280',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    background: 'transparent',
+                    fontSize: '14px'
+                  }}
+                  onClick={logout}
+                >
+                  Logout
+                </button>
+              </div>
             </div>
 
             <div style={styles.chatArea}>
-              {log.length === 0 ? (
+              {loadingSession ? (
+                <div style={styles.emptyState}>
+                  <div>
+                    <div style={styles.loadingDots}>
+                      <div style={{...styles.dot, animationDelay: '0ms'}}></div>
+                      <div style={{...styles.dot, animationDelay: '150ms'}}></div>
+                      <div style={{...styles.dot, animationDelay: '300ms'}}></div>
+                    </div>
+                    <p style={{color: '#6b7280', marginTop: '16px'}}>Loading conversation...</p>
+                  </div>
+                </div>
+              ) : log.length === 0 ? (
                 <div style={styles.emptyState}>
                   <div>
                     <div style={{
@@ -524,7 +760,7 @@ function Chat() {
               ) : (
                 <div>
                   {log.map((entry, i) => (
-                    <div key={i} style={{
+                    <div key={entry.id || i} style={{
                       ...styles.messageContainer,
                       justifyContent: entry.type === 'user' ? 'flex-end' : 'flex-start'
                     }}>
@@ -544,7 +780,36 @@ function Chat() {
                               styles.errorMessage)
                         }}>
                           {entry.type === 'kyra' ? (
-                            <MarkdownText text={entry.text} />
+                            <div>
+                              <MarkdownText text={entry.text} />
+                              {entry.sources && entry.sources.length > 0 && (
+                                <div style={{
+                                  marginTop: '12px',
+                                  padding: '8px 12px',
+                                  backgroundColor: '#f8fafc',
+                                  borderRadius: '6px',
+                                  borderLeft: '3px solid #3b82f6'
+                                }}>
+                                  <div style={{
+                                    fontSize: '12px',
+                                    fontWeight: '500',
+                                    color: '#6b7280',
+                                    marginBottom: '4px'
+                                  }}>
+                                    {entry.metadata?.used_rag ? 'NHS/Cancer Research Sources:' : 'General Medical Sources:'}
+                                  </div>
+                                  {entry.sources.map((source, idx) => (
+                                    <div key={idx} style={{
+                                      fontSize: '11px',
+                                      color: '#374151',
+                                      marginBottom: '2px'
+                                    }}>
+                                      • {source}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                           ) : (
                             <p style={{margin: 0}}>{entry.text}</p>
                           )}
@@ -653,3 +918,5 @@ const rootElement = document.getElementById("root");
 if (rootElement) {
   ReactDOM.createRoot(rootElement).render(<Chat />);
 }
+
+export default Chat;
