@@ -6,7 +6,7 @@ export async function apiRequest(endpoint: string, options: any = {}) {
     const response = await axios({
       url: endpoint,
       method: options.method || 'GET',
-      data: options.data,
+      data: options.body ? JSON.parse(options.body) : undefined,
       ...options
     })
     return response.data
