@@ -1,14 +1,56 @@
-// src/api.ts
-import axios from "axios";
+import axios from 'axios'
 
-const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1" });
-
-export async function login(email: string, password: string) {
-  const { data } = await api.post("/login", { email, password });
-  return data.access_token as string;
+// Since axios is configured globally in App.tsx, we can use it directly
+export async function apiRequest(endpoint: string, options: any = {}) {
+  try {
+    const response = await axios({
+      url: endpoint,
+      method: options.method || 'GET',
+      data: options.data,
+      ...options
+    })
+    return response.data
+  } catch (error: any) {
+    // Match the original error format
+    throw { response: { data: error.response?.data } }
+  }
 }
 
-export async function register(email: string, password: string) {
-  await api.post("/register", { email, password });
-  // server returns 200 with token OR 400 "already exists" – we ignore body
+// Auth API calls
+export const authApi = {
+  login: (email: string, password: string) =>
+    apiRequest("/login", {
+      method: "POST",
+      data: { email, password }
+    }),
+  
+  register: (email: string, password: string) =>
+    apiRequest("/register", {
+      method: "POST",
+      data: { email, password }
+    })
+}
+
+// Chat API calls - token handled by axios interceptor
+export const chatApi = {
+  sendMessage: (message: string, location?: string, sessionId?: string) =>
+    apiRequest("/chat", {
+      method: "POST",
+      data: { 
+        message, 
+        location,
+        session_id: sessionId
+      }
+    }),
+
+  getSessions: () =>
+    apiRequest("/chat/sessions"),
+
+  getSessionMessages: (sessionId: string) =>
+    apiRequest(`/chat/session/${sessionId}`),
+
+  deleteSession: (sessionId: string) =>
+    apiRequest(`/chat/session/${sessionId}`, {
+      method: 'DELETE'
+    })
 }
