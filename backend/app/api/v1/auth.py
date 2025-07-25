@@ -66,4 +66,18 @@ async def register(body: RegisterIn):
 
 @router.get("/me")
 async def me(user=Depends(get_current_user)):
-    return {"email": user.email}
+    return {
+        "email": user.email,
+        "is_admin": user.is_admin,
+        # "full_name": user.full_name,
+        # "date_of_birth": user.date_of_birth,
+        # "gender": user.gender,
+        # "sex": user.sex,
+        # "country": user.country,
+        # "address": user.address,
+        # "ethnic_group": user.ethnic_group,
+        # "long_term_conditions": user.long_term_conditions,
+        # "medications": user.medications,
+        # "consent_to_data_storage": user.consent_to_data_storage,
+        # "id": user.id,
+    }

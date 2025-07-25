@@ -180,6 +180,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                         location=body.location,
                         reason=f"medical_question_no_rag<score:{metadata.get('rag_score', 0):.3f}>",
                         score=metadata.get('rag_score', 0.0),
+                        session_id=session.id,
                     )
                 )
             
@@ -190,6 +191,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                     text=body.message,
                     location=body.location,
                     reason=f"system_error: {str(e)}",
+                    session_id=session.id,
                 )
             )
             
@@ -230,6 +232,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             session_id=session.id,
             role="assistant",
             content=response,
+            confidence_score=metadata.get("rag_score") if metadata else None,
             # sources=sources,  # Store sources with the message
             # response_metadata=metadata  # Store metadata with the message (renamed from metadata)
         )

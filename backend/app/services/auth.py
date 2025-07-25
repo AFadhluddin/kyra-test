@@ -58,3 +58,10 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
         if user is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
         return user
+
+
+def get_current_admin(user=Depends(get_current_user)):
+    if not user.is_admin:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user

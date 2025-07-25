@@ -22,9 +22,10 @@ interface Session {
 
 interface ChatProps {
   onLogout: () => void
+  token: string
 }
 
-function Chat({ onLogout }: ChatProps) {
+function Chat({ onLogout, token }: ChatProps) {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<Message[]>([])
   const [location, setLocation] = useState("")
@@ -36,10 +37,11 @@ function Chat({ onLogout }: ChatProps) {
   const [modalUrl, setModalUrl] = useState("")
   const [modalTitle, setModalTitle] = useState("")
 
-  // Load sessions on component mount and load the most recent session
+  // Load sessions only after login (when token is present)
   useEffect(() => {
-    loadSessionsAndLatest()
-  }, [])
+    if (!token) return;
+    loadSessionsAndLatest();
+  }, [token])
 
   const loadSessionsAndLatest = async () => {
     try {

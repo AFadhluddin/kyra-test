@@ -19,13 +19,13 @@ export async function apiRequest(endpoint: string, options: any = {}) {
 // Auth API calls
 export const authApi = {
   login: (email: string, password: string) =>
-    apiRequest("/login", {
+    apiRequest("/auth/login", {
       method: "POST",
       data: { email, password }
     }),
-  
+
   register: (data: any) =>
-    apiRequest("/register", {
+    apiRequest("/auth/register", {
       method: "POST",
       data
     })

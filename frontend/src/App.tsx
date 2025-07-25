@@ -37,7 +37,7 @@ function App() {
   return (
     <div className="app-container">
       {token ? (
-        <Chat onLogout={handleLogout} />
+        <Chat onLogout={handleLogout} token={token} />
       ) : (
         <Login onAuth={handleAuth} />
       )}

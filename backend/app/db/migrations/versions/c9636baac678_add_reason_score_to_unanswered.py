@@ -33,6 +33,7 @@ def upgrade() -> None:
     op.add_column('users', sa.Column('long_term_conditions', sa.Text(), nullable=True))
     op.add_column('users', sa.Column('medications', sa.Text(), nullable=True))
     op.add_column('users', sa.Column('consent_to_data_storage', sa.Boolean(), server_default='false', nullable=False))
+    op.add_column('users', sa.Column('is_admin', sa.Boolean(), server_default='false', nullable=False))
     # op.alter_column('unanswered_queries', 'created_at',
     #            existing_type=sa.DATETIME(),
     #            nullable=True,
@@ -59,4 +60,5 @@ def downgrade() -> None:
     op.drop_column('users', 'long_term_conditions')
     op.drop_column('users', 'medications')
     op.drop_column('users', 'consent_to_data_storage')
+    op.drop_column('users', 'is_admin')
     # ### end Alembic commands ###
