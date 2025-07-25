@@ -31,36 +31,36 @@ function SourceModal({
 }: SourceModalProps) {
   if (!isOpen) return null
 
-  // // Pre-detect commonly blocked domains
-  // const blockedDomains = [
-  //   'nhs.uk', 
-  //   'mayoclinic.org', 
-  //   'webmd.com',
-  //   'healthline.com',
-  //   'medicalnewstoday.com',
-  //   'facebook.com',
-  //   'twitter.com',
-  //   'youtube.com'
-  // ]
+  // Pre-detect commonly blocked domains
+  const blockedDomains = [
+    'nhs.uk', 
+    'mayoclinic.org', 
+    'webmd.com',
+    'healthline.com',
+    'medicalnewstoday.com',
+    'facebook.com',
+    'twitter.com',
+    'youtube.com'
+  ]
   
-  // const isLikelyBlocked = blockedDomains.some(domain => {
-  //   try {
-  //     const urlHost = new URL(url).hostname.replace('www.', '')
-  //     const matches = urlHost.includes(domain.replace('www.', ''))
-  //     if (matches) {
-  //       console.log(`Detected blocked domain: ${domain} in ${urlHost}`)
-  //     }
-  //     return matches
-  //   } catch {
-  //     const matches = url.includes(domain)
-  //     if (matches) {
-  //       console.log(`Detected blocked domain: ${domain} in ${url}`)
-  //     }
-  //     return matches
-  //   }
-  // })
+  const isLikelyBlocked = blockedDomains.some(domain => {
+    try {
+      const urlHost = new URL(url).hostname.replace('www.', '')
+      const matches = urlHost.includes(domain.replace('www.', ''))
+      if (matches) {
+        console.log(`Detected blocked domain: ${domain} in ${urlHost}`)
+      }
+      return matches
+    } catch {
+      const matches = url.includes(domain)
+      if (matches) {
+        console.log(`Detected blocked domain: ${domain} in ${url}`)
+      }
+      return matches
+    }
+  })
 
-  // console.log(`URL ${url} - isLikelyBlocked: ${isLikelyBlocked}`)
+  console.log(`URL ${url} - isLikelyBlocked: ${isLikelyBlocked}`)
 
   const cleanTitle = () => {
     if (!title || title === url) {
