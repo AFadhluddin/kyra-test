@@ -116,6 +116,18 @@ if "date_of_birth" in df.columns:
             return None
     df["age"] = df["date_of_birth"].apply(calc_age)
 
+# --- Normalize sources column for Arrow compatibility ---
+if "sources" in df.columns:
+    def normalize_sources(val):
+        if val is None:
+            return []
+        if isinstance(val, list):
+            return val
+        if isinstance(val, str):
+            return [val]
+        return []
+    df["sources"] = df["sources"].apply(normalize_sources)
+
 # --- Display Table ---
 st.subheader("Results Table")
 st.dataframe(df)
