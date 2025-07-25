@@ -35,7 +35,9 @@ function SessionSidebar({
       await chatApi.deleteSession(sessionId)
       
       if (currentSessionId === sessionId) {
-        window.location.reload()
+        // Instead of window.location.reload(), clear current session and reload sessions
+        onSessionSelect(null)
+        onSessionsReload()
       } else {
         onSessionsReload()
       }

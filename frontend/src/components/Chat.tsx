@@ -57,7 +57,13 @@ function Chat({ onLogout }: ChatProps) {
     }
   }
 
-  const loadSessionMessages = async (sessionId: string) => {
+  // Change loadSessionMessages to accept string | null
+  const loadSessionMessages = async (sessionId: string | null) => {
+    if (!sessionId) {
+      setCurrentSessionId(null)
+      setMessages([])
+      return
+    }
     setLoadingSession(true)
     try {
       const apiMessages = await chatApi.getSessionMessages(sessionId)

@@ -293,3 +293,28 @@ async def get_session_messages(session_id: int, user=Depends(get_current_user)):
                 # response_metadata=msg.response_metadata
             ) for msg in messages
         ]
+
+@router.delete("/chat/session/{session_id}")
+async def delete_chat_session(session_id: int, user=Depends(get_current_user)):
+    """Delete a chat session and all its messages for the current user"""
+    async with SessionLocal() as db:
+        # Verify session belongs to user
+        session_result = await db.execute(
+            select(ChatSession).where(
+                ChatSession.id == session_id,
+                ChatSession.user_id == user.id
+            )
+        )
+        session = session_result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        # Delete all messages for this session
+        await db.execute(
+            Message.__table__.delete().where(Message.session_id == session_id)
+        )
+        # Delete the session itself
+        await db.execute(
+            ChatSession.__table__.delete().where(ChatSession.id == session_id)
+        )
+        await db.commit()
+        return {"success": True, "session_id": session_id}
