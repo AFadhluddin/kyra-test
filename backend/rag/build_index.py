@@ -7,9 +7,11 @@ from llama_index.core import Settings, VectorStoreIndex, Document
 from llama_index.core import StorageContext
 from llama_index.embeddings.openai import OpenAIEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
+from dotenv import load_dotenv
 import openai, numpy as np
-
+load_dotenv(override=True)
 # -------- paths --------
+
 ROOT         = pathlib.Path(__file__).parent
 PERSIST_DIR  = ROOT / "chroma_db"
 RAW_HTML_DIR = ROOT / "html";  RAW_HTML_DIR.mkdir(exist_ok=True)

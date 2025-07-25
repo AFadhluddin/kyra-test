@@ -360,7 +360,7 @@ def format_response_with_sources(
             # Replace the Sources section with clearer attribution
             response = response.replace("Sources:", "**Sources (General Medical Knowledge - GPT-4o):**")
         else:
-            response += f"\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal NHS knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
+            response += f"\n\n\n**Note:** This response is based on general medical knowledge (GPT-4o AI), not our internal knowledge base. For official NHS guidance, please visit NHS.uk or consult your healthcare provider."
         
         return response, unique_gpt_sources if unique_gpt_sources else sources
 
@@ -401,7 +401,7 @@ def convert_text_source_to_link(source_text: str) -> str:
             topic = parts[1].strip() if len(parts) > 1 else ''
             # Convert topic to URL-friendly format
             topic_slug = topic.lower().replace(' ', '-').replace(',', '').replace('(', '').replace(')', '')
-            cdc_url = f"https://www.cdc.gov/leptospirosis/"
+            cdc_url = f"https://www.cdc.gov/"
             return f"[{source_text}]({cdc_url})"
         else:
             return f"[{source_text}](https://www.cdc.gov/)"
