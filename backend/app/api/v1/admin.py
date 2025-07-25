@@ -97,6 +97,7 @@ async def analytics(
                     "created_at": msg.created_at,
                     "rag_score": msg.confidence_score,
                     "reason": None,
+                    "sources": msg.sources,
                 })
             return results
         else:
@@ -131,5 +132,6 @@ async def analytics(
                     "created_at": uq.created_at,
                     "rag_score": uq.score,
                     "reason": uq.reason,
+                    "sources": uq.sources,
                 })
             return results

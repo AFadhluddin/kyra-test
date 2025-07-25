@@ -8,6 +8,7 @@ from ...db.models import (
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
+import re
 from ...services.auth import get_current_user
 from ...services.rag import answer
 from sqlalchemy import select, desc
@@ -172,15 +173,22 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                 user_context=user_context
             )
             
-            # Log for analytics if the question was unanswered by RAG
+            # Determine which sources to save
+            if metadata.get("used_rag"):
+                sources_to_save = sources if sources else None
+            else:
+                sources_to_save = re.findall(r'\((https?://[^\s)]+)\)', response)  # fallback, could extract from response if needed
+
+            # ---------- Save unanswered if needed ----------------------------
             if metadata.get("is_medical", False) and not metadata.get("used_rag", False):
                 db.add(
                     UnansweredQuery(
                         text=body.message,
                         location=body.location,
-                        reason=f"medical_question_no_rag<score:{metadata.get('rag_score', 0):.3f}>",
+                        reason=f"medical_question_no_rag<score:{metadata.get('rag_score', 0):.1f}>",
                         score=metadata.get('rag_score', 0.0),
                         session_id=session.id,
+                        sources=sources_to_save,
                     )
                 )
             
@@ -192,6 +200,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                     location=body.location,
                     reason=f"system_error: {str(e)}",
                     session_id=session.id,
+                    sources=sources if sources else None,
                 )
             )
             
@@ -233,6 +242,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             role="assistant",
             content=response,
             confidence_score=metadata.get("rag_score") if metadata else None,
+            sources=sources_to_save,
             # sources=sources,  # Store sources with the message
             # response_metadata=metadata  # Store metadata with the message (renamed from metadata)
         )
