@@ -19,6 +19,17 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     hashed_pw: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    # New fields for user data collection
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    date_of_birth: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)  # ISO date string
+    gender: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    sex: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ethnic_group: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    long_term_conditions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    medications: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    consent_to_data_storage: Mapped[bool] = mapped_column(default=False)
 
 class ChatSession(Base):
     __tablename__ = "chat_sessions"

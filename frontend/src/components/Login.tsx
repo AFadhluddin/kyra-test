@@ -12,6 +12,17 @@ function Login({ onAuth }: LoginProps) {
   const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  // New user data fields
+  const [fullName, setFullName] = useState("")
+  const [dateOfBirth, setDateOfBirth] = useState("")
+  const [gender, setGender] = useState("")
+  const [sex, setSex] = useState("")
+  const [country, setCountry] = useState("")
+  const [address, setAddress] = useState("")
+  const [ethnicGroup, setEthnicGroup] = useState("")
+  const [longTermConditions, setLongTermConditions] = useState("")
+  const [medications, setMedications] = useState("")
+  const [consent, setConsent] = useState(false)
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -48,11 +59,34 @@ function Login({ onAuth }: LoginProps) {
       return
     }
     
+    if (!country) {
+      setError("Country is required")
+      return
+    }
+    
+    if (!consent) {
+      setError("You must consent to data storage to register")
+      return
+    }
+    
     setLoading(true)
     setError("")
     
     try {
-      await authApi.register(email, password)
+      await authApi.register({
+        email,
+        password,
+        full_name: fullName,
+        date_of_birth: dateOfBirth,
+        gender,
+        sex,
+        country,
+        address,
+        ethnic_group: ethnicGroup,
+        long_term_conditions: longTermConditions,
+        medications,
+        consent_to_data_storage: consent
+      })
       setError("")
       alert("Account created successfully! Please log in.")
       setIsSignUp(false)
@@ -104,14 +138,109 @@ function Login({ onAuth }: LoginProps) {
             disabled={loading}
           />
           {isSignUp && (
-            <input 
-              className="form-input"
-              type="password" 
-              placeholder="Confirm Password"
-              value={confirmPassword} 
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
-            />
+            <>
+              <input 
+                className="form-input"
+                type="password" 
+                placeholder="Confirm Password"
+                value={confirmPassword} 
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={loading}
+              />
+              <input
+                className="form-input"
+                type="text"
+                placeholder="Full Name"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                disabled={loading}
+              />
+              <input
+                className="form-input"
+                type="date"
+                placeholder="Date of Birth"
+                value={dateOfBirth}
+                onChange={e => setDateOfBirth(e.target.value)}
+                disabled={loading}
+              />
+              <select
+                className="form-input"
+                value={gender}
+                onChange={e => setGender(e.target.value)}
+                disabled={loading}
+              >
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Non-binary">Non-binary</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+              <select
+                className="form-input"
+                value={sex}
+                onChange={e => setSex(e.target.value)}
+                disabled={loading}
+              >
+                <option value="">Select Sex</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+              </select>
+              <input
+                className="form-input"
+                type="text"
+                placeholder="Country (required)"
+                value={country}
+                onChange={e => setCountry(e.target.value)}
+                disabled={loading}
+                required
+              />
+              <input
+                className="form-input"
+                type="text"
+                placeholder="Full Address (optional)"
+                value={address}
+                onChange={e => setAddress(e.target.value)}
+                disabled={loading}
+              />
+              <select
+                className="form-input"
+                value={ethnicGroup}
+                onChange={e => setEthnicGroup(e.target.value)}
+                disabled={loading}
+              >
+                <option value="">Select Ethnic Group</option>
+                <option value="White">White</option>
+                <option value="Black">Black</option>
+                <option value="Asian">Asian</option>
+                <option value="Mixed">Mixed</option>
+                <option value="Other">Other</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+              </select>
+              <textarea
+                className="form-input"
+                placeholder="Long-term Medical Conditions"
+                value={longTermConditions}
+                onChange={e => setLongTermConditions(e.target.value)}
+                disabled={loading}
+              />
+              <textarea
+                className="form-input"
+                placeholder="Medications"
+                value={medications}
+                onChange={e => setMedications(e.target.value)}
+                disabled={loading}
+              />
+              <label style={{ display: 'flex', alignItems: 'center', marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={e => setConsent(e.target.checked)}
+                  disabled={loading}
+                  style={{ marginRight: 8 }}
+                />
+                I consent to the storage of my data as described above
+              </label>
+            </>
           )}
           <button 
             className={`form-button ${loading ? 'loading' : ''}`}

@@ -3,6 +3,7 @@ from ...db.models import (
     ChatSession,
     Message,
     UnansweredQuery,
+    User,  # Add User import for type hints
 )
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPException
 from pydantic import BaseModel
@@ -32,6 +33,35 @@ class ChatOut(BaseModel):
     session_id: int
     messages: List[MessageOut] = []
     metadata: dict = {}  # Include metadata for debugging/analytics
+
+def build_user_context(user: 'User') -> str:
+    if not getattr(user, 'consent_to_data_storage', False):
+        return ""
+    info = []
+    if user.full_name:
+        info.append(f"Full Name: {user.full_name}")
+    if user.date_of_birth:
+        info.append(f"Date of Birth: {user.date_of_birth}")
+    if user.gender:
+        info.append(f"Gender: {user.gender}")
+    if user.sex:
+        info.append(f"Sex: {user.sex}")
+    if user.country:
+        info.append(f"Country: {user.country}")
+    if user.address:
+        info.append(f"Address: {user.address}")
+    if user.ethnic_group:
+        info.append(f"Ethnic Group: {user.ethnic_group}")
+    if user.long_term_conditions:
+        info.append(f"Long-term Medical Conditions: {user.long_term_conditions}")
+    if user.medications:
+        info.append(f"Medications: {user.medications}")
+    if not info:
+        return ""
+    return (
+        "The following is background information about the user. Use this to provide more personalized and relevant responses. "
+        + " | ".join(info)
+    )
 
 @router.post("/chat", response_model=ChatOut)
 async def chat(body: ChatIn, user=Depends(get_current_user)):
@@ -83,6 +113,8 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                 "role": role, 
                 "content": msg.content
             })
+        # Build user context string (do not prepend to conversation_history)
+        user_context = build_user_context(user)
         
         print(f"[DEBUG] Built conversation history with {len(conversation_history)} messages")
         if conversation_history:
@@ -136,7 +168,8 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             response, sources, metadata = answer(
                 query=contextual_query,
                 conversation_history=conversation_history,
-                original_query=body.message
+                original_query=body.message,
+                user_context=user_context
             )
             
             # Log for analytics if the question was unanswered by RAG

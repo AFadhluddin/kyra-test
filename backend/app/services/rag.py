@@ -198,10 +198,11 @@ def generate_response_with_gpt4o(
     current_message: str,
     rag_context: Optional[str] = None,
     sources: Optional[List[str]] = None,
-    is_medical: bool = False
+    is_medical: bool = False,
+    user_context: Optional[str] = None,
 ) -> str:
     """
-    Generate response using GPT-4o, optionally enhanced with RAG context
+    Generate response using GPT-4o, optionally enhanced with RAG context and user context
     """
     
     # Build system prompt
@@ -230,14 +231,14 @@ while sounding friendly and conversational.
   and advise calling local emergency services or seeing a doctor urgently.  
 • Keep explanations in plain language; define unfamiliar medical terms.  
 • Do **not** prescribe specific drugs/doses or create treatment plans.  
+• If there is user context, use it to tailor your response.
 • If user shows self‑harm intent, respond with compassion and give crisis
   hotline info for their region.
-
 """
-
     # ---------- Retrieved medical context ----------
     if rag_context:
         system_prompt += f"""
+
 **Trusted reference material**  
 Below are vetted excerpts (primarily NHS and Cancer Research UK).  
 Use them to support your answer and cite them explicitly when quoted.
@@ -259,6 +260,9 @@ Sources:
 - Mayo Clinic – [Condition overview]
 - WHO – [Condition overview]
 """
+    # Always inject user context for medical queries
+    if is_medical and user_context:
+        system_prompt += f"\n\n**User background/context:**\n{user_context}\n"
 
     # Prepare messages for GPT-4o - include conversation history + current message
     gpt_messages = [{"role": "system", "content": system_prompt}]
@@ -448,7 +452,8 @@ def convert_text_source_to_link(source_text: str) -> str:
 def answer(
     query: str, 
     conversation_history: Optional[List[Dict[str, str]]] = None,
-    original_query: Optional[str] = None
+    original_query: Optional[str] = None,
+    user_context: Optional[str] = None,
 ) -> Tuple[str, List[str], Dict[str, Any]]:
     """
     Main answer function that handles both general and medical questions.
@@ -513,7 +518,7 @@ def answer(
     print(f"[DEBUG] Calling GPT-4o with {len(messages)} conversation messages")
     
     # Generate response with GPT-4o (with or without RAG enhancement)
-    response = generate_response_with_gpt4o(messages, current_message, rag_context, sources, is_medical)
+    response = generate_response_with_gpt4o(messages, current_message, rag_context, sources, is_medical, user_context)
     
     print(f"[DEBUG] GPT-4o response: {response[:200]}...")
     

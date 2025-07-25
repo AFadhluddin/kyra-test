@@ -24,7 +24,16 @@ async def login(body: LoginIn):
 
 
 class RegisterIn(LoginIn):
-    pass
+    full_name: str | None = None
+    date_of_birth: str | None = None
+    gender: str | None = None
+    sex: str | None = None
+    country: str | None = None
+    address: str | None = None
+    ethnic_group: str | None = None
+    long_term_conditions: str | None = None
+    medications: str | None = None
+    consent_to_data_storage: bool = False
 
 
 @router.post("/register")
@@ -34,7 +43,23 @@ async def register(body: RegisterIn):
         return {"detail": "User exists"}
 
     async with SessionLocal() as db:
-        db.add(User(email=body.email, hashed_pw=_hash_pw(body.password)))
+        user_kwargs = dict(email=body.email, hashed_pw=_hash_pw(body.password))
+        if body.consent_to_data_storage:
+            user_kwargs.update(
+                full_name=body.full_name,
+                date_of_birth=body.date_of_birth,
+                gender=body.gender,
+                sex=body.sex,
+                country=body.country,
+                address=body.address,
+                ethnic_group=body.ethnic_group,
+                long_term_conditions=body.long_term_conditions,
+                medications=body.medications,
+                consent_to_data_storage=True
+            )
+        else:
+            user_kwargs["consent_to_data_storage"] = False
+        db.add(User(**user_kwargs))
         await db.commit()
     return {"detail": "ok"}
 

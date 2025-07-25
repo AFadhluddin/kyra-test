@@ -24,10 +24,10 @@ export const authApi = {
       data: { email, password }
     }),
   
-  register: (email: string, password: string) =>
+  register: (data: any) =>
     apiRequest("/register", {
       method: "POST",
-      data: { email, password }
+      data
     })
 }
 
