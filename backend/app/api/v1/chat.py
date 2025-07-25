@@ -185,7 +185,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                     UnansweredQuery(
                         text=body.message,
                         location=body.location,
-                        reason=f"medical_question_no_rag<score:{metadata.get('rag_score', 0):.1f}>",
+                        reason=f"medical_question_no_rag",
                         score=metadata.get('rag_score', 0.0),
                         session_id=session.id,
                         sources=sources_to_save,
