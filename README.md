@@ -4,7 +4,7 @@ Initial pre-beta for Kyra
 
 ## Overview
 
-Kyra is a full-stack application featuring a Python-based backend (FastAPI) and a modern React frontend. It is designed to provide a chat interface powered by Retrieval-Augmented Generation (RAG), with user authentication, data ingestion, and document retrieval capabilities. The system is modular, scalable, and easy to extend.
+Kyra is a full-stack application featuring a Python-based backend (FastAPI) and a modern React frontend. It is designed to provide a chat interface powered by Retrieval-Augmented Generation (RAG), with user authentication, data ingestion, document retrieval, and advanced analytics capabilities. The system is modular, scalable, and easy to extend.
 
 ---
 
@@ -13,7 +13,9 @@ Kyra is a full-stack application featuring a Python-based backend (FastAPI) and 
 - **Chatbot Interface:** Interactive chat UI for users to ask questions and receive answers, with support for document-sourced responses.
 - **User Authentication:** Secure login and session management.
 - **Retrieval-Augmented Generation (RAG):** Combines LLMs with a vector database (ChromaDB) for context-aware answers.
-- **Admin & Analytics:** Endpoints for admin operations and analytics.
+- **Admin & Analytics:**
+  - **Analytics Dashboard:** Streamlit-based dashboard for admin users to view, filter, and visualize chat and user analytics, including demographic breakdowns and RAG scores.
+  - **Analytics API:** Admin-only endpoints for querying detailed analytics and unanswered questions, with rich filtering options.
 - **Document Ingestion:** Scripts and pipelines for ingesting and indexing new documents (e.g., NHS and Cancer Research UK health data).
 - **Source Attribution:** Modal UI to display sources for chatbot answers.
 - **Extensible Architecture:** Modular backend and frontend for easy feature addition.
@@ -25,9 +27,11 @@ Kyra is a full-stack application featuring a Python-based backend (FastAPI) and 
 ### Backend (`backend/`)
 
 - **Framework:** FastAPI
-- **API:** RESTful endpoints for authentication, chat, admin, and preview.
+- **API:** RESTful endpoints for authentication, chat, admin, analytics, and preview.
 - **Database:** SQLite (dev) via SQLAlchemy ORM; migrations managed by Alembic.
 - **RAG Services:** Document embedding, indexing, and retrieval using ChromaDB.
+- **Analytics Dashboard:** Streamlit app for admin analytics (`services/analytics_dashboard.py`).
+- **Analytics API:** `/api/v1/admin/analytics` and `/api/v1/admin/unanswered` endpoints for data and insights (admin only).
 - **Scripts:** For data refresh and user registration.
 
 ### Frontend (`frontend/`)
@@ -76,6 +80,15 @@ npm install
 npm run dev
 ```
 
+### Analytics Dashboard (Admin Only)
+
+```bash
+cd backend/app/services
+streamlit run analytics_dashboard.py
+```
+- Set `API_URL` in Streamlit secrets or use the default.
+- Log in with admin credentials.
+
 ### Useful Scripts
 
 - `scripts/refresh_nhs_data.sh`: Refreshes NHS data for ingestion.
@@ -88,10 +101,12 @@ npm run dev
 ```
 backend/
   app/
-    api/v1/         # FastAPI routers (auth, chat, admin, preview)
+    api/v1/         # FastAPI routers (auth, chat, admin, analytics, preview)
     core/           # Config and settings
     db/             # ORM models, migrations
-    services/       # Business logic (auth, analytics, RAG)
+    services/       # Business logic (auth, analytics, RAG, dashboard)
+      analytics_dashboard.py   # Streamlit analytics dashboard for admins
+      analytics.py             # Analytics business logic (if present)
   rag/              # RAG pipeline, vector DB, document loaders
   migrations/       # Alembic migrations
 
@@ -102,6 +117,14 @@ frontend/
     App.tsx         # Main app
   public/           # Static assets
 ```
+
+---
+
+## Analytics Endpoints (Admin Only)
+
+- `GET /api/v1/admin/analytics`: Returns detailed analytics on answered and unanswered queries. Supports filtering by answered/unanswered, ethnic group, gender, country, long-term conditions, medications, age, RAG score, reason, user, and session.
+- `GET /api/v1/admin/unanswered`: Lists recent unanswered queries.
+- All analytics endpoints require admin authentication.
 
 ---
 
