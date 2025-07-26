@@ -50,6 +50,8 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text)
     confidence_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # RAG score
     sources: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Question category
+    user_question: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Original user question for this answer
     # response_metadata: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)  # Store metadata as JSON (renamed from metadata)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -61,6 +63,7 @@ class UnansweredQuery(Base):
     location = Column(String, nullable=True)
     reason = Column(String, nullable=True)  # NEW
     score = Column(Float, nullable=True)  # NEW
+    category = Column(String(50), nullable=True)  # Question category
     created_at = Column(DateTime, default=datetime.utcnow)
     session_id = Column(Integer, ForeignKey("chat_sessions.id"), nullable=True) 
     sources = Column(JSON, nullable=True) 

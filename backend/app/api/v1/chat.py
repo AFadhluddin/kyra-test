@@ -11,6 +11,7 @@ from typing import Optional, List
 import re
 from ...services.auth import get_current_user
 from ...services.rag import answer
+from ...services.categorization import categorize_question, get_available_categories
 from sqlalchemy import select, desc
 
 router = APIRouter()
@@ -25,6 +26,7 @@ class MessageOut(BaseModel):
     role: str
     content: str
     created_at: str
+    category: Optional[str] = None
     # sources: Optional[List[str]] = None
     # response_metadata: Optional[dict] = None  # Changed from metadata to response_metadata
 
@@ -130,11 +132,21 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
         for i, msg in enumerate(history_messages):
             print(f"  DB {i+1}. ID:{msg.id} Role:{msg.role} Content:{msg.content[:50]}...")
         
+        # ---------- Categorize the question if it's medical ---------------
+        category = None
+        try:
+            # Only categorize if it's a medical question (we'll determine this from the RAG response)
+            # We'll set the category after we get the response and know if it's medical
+            pass
+        except Exception as e:
+            print(f"[DEBUG] Categorization error: {e}")
+        
         # ---------- Save user message AFTER getting history ---------------
         user_message = Message(
             session_id=session.id,
             role="user",
-            content=body.message
+            content=body.message,
+            category=category  # Will be None for non-medical questions
         )
         db.add(user_message)
         # Don't commit yet - we'll commit after the assistant response
@@ -179,6 +191,14 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             else:
                 sources_to_save = re.findall(r'\((https?://[^\s)]+)\)', response)  # fallback, could extract from response if needed
 
+            # ---------- Categorize ALL questions and save category ---------------
+            try:
+                category = categorize_question(body.message)
+                print(f"[DEBUG] Question categorized as: {category}")
+            except Exception as e:
+                print(f"[DEBUG] Categorization error: {e}")
+                category = None
+            
             # ---------- Save unanswered if needed ----------------------------
             if metadata.get("is_medical", False) and not metadata.get("used_rag", False):
                 db.add(
@@ -187,6 +207,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                         location=body.location,
                         reason=f"medical_question_no_rag",
                         score=metadata.get('rag_score', 0.0),
+                        category=category,
                         session_id=session.id,
                         sources=sources_to_save,
                     )
@@ -199,6 +220,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                     text=body.message,
                     location=body.location,
                     reason=f"system_error: {str(e)}",
+                    category=category,  # Will be None if categorization failed
                     session_id=session.id,
                     sources=sources if sources else None,
                 )
@@ -230,7 +252,8 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                         id=msg.id,
                         role=msg.role,
                         content=msg.content,
-                        created_at=msg.created_at.isoformat()
+                        created_at=msg.created_at.isoformat(),
+                        category=msg.category
                     ) for msg in all_messages
                 ],
                 "metadata": {"error": True}
@@ -243,6 +266,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             content=response,
             confidence_score=metadata.get("rag_score") if metadata else None,
             sources=sources_to_save,
+            user_question=body.message,  # Store the original user question
             # sources=sources,  # Store sources with the message
             # response_metadata=metadata  # Store metadata with the message (renamed from metadata)
         )
@@ -335,6 +359,7 @@ async def get_session_messages(session_id: int, user=Depends(get_current_user)):
                 role=msg.role,
                 content=msg.content,
                 created_at=msg.created_at.isoformat(),
+                category=msg.category,
                 # sources=msg.sources,
                 # response_metadata=msg.response_metadata
             ) for msg in messages
@@ -364,3 +389,8 @@ async def delete_chat_session(session_id: int, user=Depends(get_current_user)):
         )
         await db.commit()
         return {"success": True, "session_id": session_id}
+
+@router.get("/chat/categories")
+async def get_categories():
+    """Get available question categories for filtering"""
+    return {"categories": get_available_categories()}

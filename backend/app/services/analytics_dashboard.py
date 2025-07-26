@@ -70,6 +70,7 @@ max_age = st.sidebar.number_input("Max Age", min_value=0, max_value=120, value=0
 rag_score_min = st.sidebar.number_input("Min RAG Score", value=0.0)
 rag_score_max = st.sidebar.number_input("Max RAG Score", value=0.0)
 reason = st.sidebar.text_input("Reason (for unanswered)")
+category = st.sidebar.selectbox("Category", ["All"] + ["Symptoms & Diagnosis", "Treatment & Medication", "Prevention & Lifestyle"])
 
 params = {"answered": answered}
 if ethnic_group:
@@ -92,6 +93,8 @@ if rag_score_max:
     params["rag_score_max"] = rag_score_max
 if not answered and reason:
     params["reason"] = reason
+if category != "All":
+    params["category"] = category
 
 # --- Fetch Data ---
 with st.spinner("Fetching data..."):
@@ -151,5 +154,20 @@ with col2:
 if not answered and "reason" in df.columns:
     st.subheader("Unanswered Reasons Distribution")
     st.bar_chart(df["reason"].value_counts())
+
+# --- Category Analytics ---
+if "category" in df.columns:
+    st.subheader("Question Categories")
+    col1, col2 = st.columns(2)
+    with col1:
+        category_counts = df["category"].value_counts()
+        st.bar_chart(category_counts)
+    with col2:
+        if len(category_counts) > 0:
+            st.write("Category Breakdown:")
+            for cat, count in category_counts.items():
+                if pd.notna(cat):  # Only show non-null categories
+                    percentage = (count / len(df)) * 100
+                    st.write(f"• {cat}: {count} ({percentage:.1f}%)")
 
 st.caption("Data is filtered by the selected criteria. Only admin users can access this dashboard.") 

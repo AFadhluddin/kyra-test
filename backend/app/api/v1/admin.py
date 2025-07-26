@@ -42,6 +42,7 @@ async def analytics(
     medications: str = None,
     user_id: int = None,
     session_id: int = None,
+    category: str = None,
     user=Depends(get_current_admin)
 ):
     async with SessionLocal() as db:
@@ -81,11 +82,35 @@ async def analytics(
                 query = query.where(and_(*user_filters))
             if filters:
                 query = query.where(and_(*filters))
+            
+            # Apply category filter after getting the data
             rows = (await db.execute(query)).all()
             results = []
             for msg, session, user in rows:
+                # Use the stored user_question if available, otherwise fall back to lookup
+                if msg.user_question:
+                    question_text = msg.user_question
+                    question_category = None  # We'll get category from the user message if needed
+                else:
+                    # Get the corresponding user question for this assistant response (fallback)
+                    user_question_query = select(Message).where(
+                        Message.session_id == session.id,
+                        Message.role == "user",
+                        Message.created_at < msg.created_at
+                    ).order_by(Message.created_at.desc()).limit(1)
+                    
+                    user_question_result = await db.execute(user_question_query)
+                    user_question = user_question_result.scalar_one_or_none()
+                    question_text = user_question.content if user_question else "Unknown question"
+                    question_category = user_question.category if user_question else None
+                
+                # Apply category filter
+                if category and question_category and question_category != category:
+                    continue
+                
                 results.append({
-                    "question": msg.content,
+                    "question": question_text,
+                    "answer": msg.content,
                     "session_id": session.id,
                     "user_id": user.id,
                     "ethnic_group": user.ethnic_group,
@@ -98,6 +123,7 @@ async def analytics(
                     "rag_score": msg.confidence_score,
                     "reason": None,
                     "sources": msg.sources,
+                    "category": question_category,
                 })
             return results
         else:
@@ -119,6 +145,9 @@ async def analytics(
             rows = (await db.execute(query)).all()
             results = []
             for uq, session, user in rows:
+                # Apply category filter for unanswered queries
+                if category and uq.category != category:
+                    continue
                 results.append({
                     "question": uq.text,
                     "session_id": session.id if session else None,
@@ -133,5 +162,6 @@ async def analytics(
                     "rag_score": uq.score,
                     "reason": uq.reason,
                     "sources": uq.sources,
+                    "category": uq.category,
                 })
             return results
