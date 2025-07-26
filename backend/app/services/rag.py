@@ -15,7 +15,7 @@ load_dotenv(override=True)
 # Configuration
 # --------------------------------------------------------------------------- #
 openai_client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-SIM_THRESHOLD: float = 0.30  # minimum similarity to use RAG knowledge
+SIM_THRESHOLD: float = 0.35  # minimum similarity to use RAG knowledge
 
 INDEX_DIR = (
     Path(__file__)

@@ -132,24 +132,27 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
         for i, msg in enumerate(history_messages):
             print(f"  DB {i+1}. ID:{msg.id} Role:{msg.role} Content:{msg.content[:50]}...")
         
-        # ---------- Categorize the question if it's medical ---------------
+        # ---------- Categorize ALL questions BEFORE saving user message ---------------
         category = None
         try:
-            # Only categorize if it's a medical question (we'll determine this from the RAG response)
-            # We'll set the category after we get the response and know if it's medical
-            pass
+            category = categorize_question(body.message)
+            print(f"[DEBUG] Question categorized as: {category}")
+            print(f"[DEBUG] Category type: {type(category)}")
+            print(f"[DEBUG] Category length: {len(category) if category else 0}")
         except Exception as e:
             print(f"[DEBUG] Categorization error: {e}")
+            category = None
         
         # ---------- Save user message AFTER getting history ---------------
+        print(f"[DEBUG] Creating user message with category: '{category}'")
         user_message = Message(
             session_id=session.id,
             role="user",
             content=body.message,
-            category=category  # Will be None for non-medical questions
+            category=category  # Now properly categorized for all questions
         )
         db.add(user_message)
-        # Don't commit yet - we'll commit after the assistant response
+        # Don't commit yet - we'll commit both messages together
         
         # ---------- Generate response with hybrid system -----------------
         try:
@@ -191,27 +194,22 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             else:
                 sources_to_save = re.findall(r'\((https?://[^\s)]+)\)', response)  # fallback, could extract from response if needed
 
-            # ---------- Categorize ALL questions and save category ---------------
-            try:
-                category = categorize_question(body.message)
-                print(f"[DEBUG] Question categorized as: {category}")
-            except Exception as e:
-                print(f"[DEBUG] Categorization error: {e}")
-                category = None
-            
             # ---------- Save unanswered if needed ----------------------------
             if metadata.get("is_medical", False) and not metadata.get("used_rag", False):
-                db.add(
-                    UnansweredQuery(
-                        text=body.message,
-                        location=body.location,
-                        reason=f"medical_question_no_rag",
-                        score=metadata.get('rag_score', 0.0),
-                        category=category,
-                        session_id=session.id,
-                        sources=sources_to_save,
-                    )
+                print(f"[DEBUG] Saving unanswered query with category: '{category}'")
+                unanswered_query = UnansweredQuery(
+                    text=body.message,
+                    location=body.location,
+                    reason=f"medical_question_no_rag",
+                    score=metadata.get('rag_score', 0.0),
+                    category=category,  # Already categorized above
+                    session_id=session.id,
+                    sources=sources_to_save,
                 )
+                db.add(unanswered_query)
+                await db.commit()
+                await db.refresh(unanswered_query)
+                print(f"[DEBUG] Unanswered query saved with ID: {unanswered_query.id}, category: '{unanswered_query.category}'")
             
         except Exception as e:
             # Log the error
@@ -259,7 +257,8 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                 "metadata": {"error": True}
             }
         
-        # ---------- Success - save assistant message ---------------------
+        # ---------- Success - save both messages together ---------------------
+        print(f"[DEBUG] Creating assistant message with category: '{category}'")
         assistant_message = Message(
             session_id=session.id,
             role="assistant",
@@ -267,11 +266,18 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
             confidence_score=metadata.get("rag_score") if metadata else None,
             sources=sources_to_save,
             user_question=body.message,  # Store the original user question
+            category=category,  # Include the category for the assistant response
             # sources=sources,  # Store sources with the message
             # response_metadata=metadata  # Store metadata with the message (renamed from metadata)
         )
         db.add(assistant_message)
+        
+        # Commit both messages together
         await db.commit()
+        await db.refresh(user_message)
+        await db.refresh(assistant_message)
+        print(f"[DEBUG] User message saved with ID: {user_message.id}, category: '{user_message.category}'")
+        print(f"[DEBUG] Assistant message saved with ID: {assistant_message.id}, category: '{assistant_message.category}'")
         
         # Get all messages for response
         all_messages_result = await db.execute(
@@ -291,6 +297,7 @@ async def chat(body: ChatIn, user=Depends(get_current_user)):
                     role=msg.role,
                     content=msg.content,
                     created_at=msg.created_at.isoformat(),
+                    category=msg.category,
                     # sources=msg.sources,
                     # response_metadata=msg.response_metadata
                 ) for msg in all_messages
