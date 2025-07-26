@@ -28,14 +28,25 @@ INDEX_DIR = (
 # Initialise Chroma-powered query engine (loads once per worker)
 # --------------------------------------------------------------------------- #
 chroma_client = PersistentClient(path=str(INDEX_DIR))
-collection = chroma_client.get_or_create_collection("nhs_docs")
-store = ChromaVectorStore(chroma_collection=collection, stores_text=True)
+
+# Try to get both collections - NHS and Cancer Research UK
+nhs_collection = chroma_client.get_or_create_collection("nhs_docs")
+cancer_collection = chroma_client.get_or_create_collection("cancer_research_docs")
+
+# Create vector stores for both collections
+nhs_store = ChromaVectorStore(chroma_collection=nhs_collection, stores_text=True)
+cancer_store = ChromaVectorStore(chroma_collection=cancer_collection, stores_text=True)
 
 Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 Settings.llm = OpenAI(model="gpt-4o-mini", temperature=0.2)  # Keep for RAG retrieval
 
-index = VectorStoreIndex.from_vector_store(store)
-query_engine = index.as_query_engine(similarity_top_k=4)
+# Create indices for both collections
+nhs_index = VectorStoreIndex.from_vector_store(nhs_store)
+cancer_index = VectorStoreIndex.from_vector_store(cancer_store)
+
+# Create query engines for both collections
+nhs_query_engine = nhs_index.as_query_engine(similarity_top_k=3)
+cancer_query_engine = cancer_index.as_query_engine(similarity_top_k=3)
 
 # --------------------------------------------------------------------------- #
 # Medical question classifier
@@ -92,7 +103,7 @@ def get_rag_context_weighted(
     context_weight: float = 0.2
 ) -> Tuple[Optional[str], float, List[str]]:
     """
-    Get RAG context using exponentially weighted queries.
+    Get RAG context using exponentially weighted queries from both NHS and Cancer Research UK collections.
     Prioritizes the current question while considering recent context.
     
     Args:
@@ -106,23 +117,54 @@ def get_rag_context_weighted(
     """
     print(f"[DEBUG] RAG: Using weighted approach - primary: {primary_weight}, context: {context_weight}")
     
-    # Always search with current query first (primary search)
+    # Search both collections with current query
+    all_results = []
+    best_score = 0.0
+    
+    # Search NHS collection
     try:
-        primary_res = query_engine.query(current_query)
-        print(f"[DEBUG] RAG: Primary search (current query only)")
+        nhs_res = nhs_query_engine.query(current_query)
+        if nhs_res.source_nodes:
+            for node in nhs_res.source_nodes:
+                if node.score:
+                    all_results.append({
+                        'text': node.node.text,
+                        'score': node.score,
+                        'source': node.node.metadata.get("source", ""),
+                        'collection': 'nhs'
+                    })
+                    best_score = max(best_score, node.score)
+        print(f"[DEBUG] RAG: NHS search found {len(nhs_res.source_nodes)} results")
     except Exception as exc:
-        print(f"[DEBUG] RAG retrieval error: {exc}")
+        print(f"[DEBUG] RAG: NHS search error: {exc}")
+    
+    # Search Cancer Research UK collection
+    try:
+        cancer_res = cancer_query_engine.query(current_query)
+        if cancer_res.source_nodes:
+            for node in cancer_res.source_nodes:
+                if node.score:
+                    all_results.append({
+                        'text': node.node.text,
+                        'score': node.score,
+                        'source': node.node.metadata.get("source", ""),
+                        'collection': 'cancer_research'
+                    })
+                    best_score = max(best_score, node.score)
+        print(f"[DEBUG] RAG: Cancer Research search found {len(cancer_res.source_nodes)} results")
+    except Exception as exc:
+        print(f"[DEBUG] RAG: Cancer Research search error: {exc}")
+    
+    # If nothing retrieved from either collection
+    if not all_results:
+        print(f"[DEBUG] RAG: No results from either collection")
         return None, 0.0, []
     
-    # If nothing retrieved from primary search
-    if not primary_res.source_nodes:
-        print(f"[DEBUG] RAG: No results from primary search")
-        return None, 0.0, []
+    # Sort results by score and take top results
+    all_results.sort(key=lambda x: x['score'], reverse=True)
+    top_results = all_results[:6]  # Take top 6 results total
     
-    primary_score = primary_res.source_nodes[0].score or 0.0
-    print(f"[DEBUG] RAG: Primary similarity '{current_query[:30]}…' = {primary_score:.3f}")
-    
-    # Build contextual query only if we have conversation history
+    # Build contextual query if we have conversation history
     contextual_score = 0.0
     if conversation_history and len(conversation_history) > 0:
         try:
@@ -134,24 +176,38 @@ def get_rag_context_weighted(
             contextual_query = f"Context: {' | '.join(recent_context)} | Current: {current_query}"
             print(f"[DEBUG] RAG: Contextual search with recent history")
             
-            context_res = query_engine.query(contextual_query)
-            if context_res.source_nodes:
-                contextual_score = context_res.source_nodes[0].score or 0.0
+            # Search both collections with contextual query
+            context_results = []
+            
+            try:
+                nhs_context_res = nhs_query_engine.query(contextual_query)
+                if nhs_context_res.source_nodes:
+                    context_results.extend([node.score or 0.0 for node in nhs_context_res.source_nodes])
+            except:
+                pass
+            
+            try:
+                cancer_context_res = cancer_query_engine.query(contextual_query)
+                if cancer_context_res.source_nodes:
+                    context_results.extend([node.score or 0.0 for node in cancer_context_res.source_nodes])
+            except:
+                pass
+            
+            if context_results:
+                contextual_score = max(context_results)
                 print(f"[DEBUG] RAG: Contextual similarity = {contextual_score:.3f}")
         except Exception as exc:
             print(f"[DEBUG] RAG: Contextual search failed: {exc}")
             contextual_score = 0.0
     
     # Calculate weighted similarity score
-    # This heavily favors the current question but considers context
-    final_score = (primary_weight * primary_score) + (context_weight * contextual_score)
-    print(f"[DEBUG] RAG: Weighted similarity = {final_score:.3f} (primary: {primary_score:.3f}, context: {contextual_score:.3f})")
+    final_score = (primary_weight * best_score) + (context_weight * contextual_score)
+    print(f"[DEBUG] RAG: Weighted similarity = {final_score:.3f} (primary: {best_score:.3f}, context: {contextual_score:.3f})")
     
-    # Use primary search results for retrieval (current question focused)
+    # Extract sources from top results
     links: List[str] = [
-        n.node.metadata.get("source", "")
-        for n in primary_res.source_nodes
-        if n.node.metadata.get("source")
+        result['source'] for result in top_results 
+        if result['source'] and (("nhs.uk" in result['source']) or ("cancerresearchuk.org" in result['source']))
     ]
     
     # Domain filter: only NHS / Cancer Research pages
@@ -164,11 +220,11 @@ def get_rag_context_weighted(
         print(f"[DEBUG] RAG: Weighted similarity {final_score:.3f} below threshold {SIM_THRESHOLD}")
         return None, final_score, links
     
-    # Extract context from primary search results (focused on current question)
+    # Extract context from top results
     context_parts = []
-    for node in primary_res.source_nodes:
-        if node.score and node.score >= (SIM_THRESHOLD * 0.8):  # Slightly lower threshold for individual nodes
-            context_parts.append(node.node.text)
+    for result in top_results:
+        if result['score'] >= (SIM_THRESHOLD * 0.8):  # Slightly lower threshold for individual nodes
+            context_parts.append(result['text'])
     
     context_text = "\n\n".join(context_parts) if context_parts else None
     return context_text, final_score, links
