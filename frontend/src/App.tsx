@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import Login from './components/Login'
 import Chat from './components/Chat'
+import Profile from './components/Profile'
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1"
 axios.defaults.baseURL = API_BASE
@@ -13,6 +14,8 @@ function App() {
   const [token, setToken] = useState<string>(
     () => localStorage.getItem("jwt") ?? ""
   )
+
+  const [profileMode, setProfileMode] = useState(false)
 
   console.log('Current token:', token)
 
@@ -37,7 +40,14 @@ function App() {
   return (
     <div className="app-container">
       {token ? (
-        <Chat onLogout={handleLogout} token={token} />
+        profileMode ? (
+          <Profile onBack={() => setProfileMode(false)} />
+        ) : (
+          <>
+            <button className="profile-btn" onClick={() => setProfileMode(true)} style={{position:'absolute',top:10,right:10}}>Profile</button>
+            <Chat onLogout={handleLogout} token={token} />
+          </>
+        )
       ) : (
         <Login onAuth={handleAuth} />
       )}

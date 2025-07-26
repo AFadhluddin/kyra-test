@@ -28,6 +28,15 @@ export const authApi = {
     apiRequest("/auth/register", {
       method: "POST",
       data
+    }),
+
+  getMe: () =>
+    apiRequest("/auth/me"),
+
+  updateMe: (data: any) =>
+    apiRequest("/auth/me", {
+      method: "PUT",
+      data
     })
 }
 
@@ -52,5 +61,8 @@ export const chatApi = {
   deleteSession: (sessionId: string) =>
     apiRequest(`/chat/session/${sessionId}`, {
       method: 'DELETE'
-    })
+    }),
+
+  getCategories: () =>
+    apiRequest("/chat/categories")
 }

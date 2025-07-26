@@ -5,6 +5,7 @@ interface Message {
   id?: string
   text: string
   type: 'user' | 'kyra' | 'error'
+  category?: string
   sources?: string[]
   metadata?: {
     used_rag?: boolean

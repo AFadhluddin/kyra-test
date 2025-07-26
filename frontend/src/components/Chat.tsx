@@ -8,6 +8,7 @@ interface Message {
   id?: string
   text: string
   type: 'user' | 'kyra' | 'error'
+  category?: string
   sources?: string[]
   metadata?: {
     used_rag?: boolean
@@ -36,12 +37,16 @@ function Chat({ onLogout, token }: ChatProps) {
   const [showModal, setShowModal] = useState(false)
   const [modalUrl, setModalUrl] = useState("")
   const [modalTitle, setModalTitle] = useState("")
+  // Category filter state removed
 
   // Load sessions only after login (when token is present)
   useEffect(() => {
     if (!token) return;
     loadSessionsAndLatest();
+    // loadCategories removed
   }, [token])
+
+  // loadCategories function removed
 
   const loadSessionsAndLatest = async () => {
     try {
@@ -75,6 +80,7 @@ function Chat({ onLogout, token }: ChatProps) {
         text: msg.content,
         type: msg.role === 'user' ? 'user' : 'kyra',
         id: msg.id,
+        category: msg.category,
         sources: msg.sources,
         metadata: msg.response_metadata
       }))
@@ -121,6 +127,7 @@ function Chat({ onLogout, token }: ChatProps) {
         text: msg.content,
         type: msg.role === 'user' ? 'user' : 'kyra',
         id: msg.id,
+        category: msg.category,
         sources: msg.sources,
         metadata: msg.response_metadata
       }))
@@ -159,6 +166,8 @@ function Chat({ onLogout, token }: ChatProps) {
       sendMessage()
     }
   }
+
+  // Remove filteredMessages logic, just use messages directly
 
   if (loadingSession) {
     return (
@@ -203,6 +212,7 @@ function Chat({ onLogout, token }: ChatProps) {
         </div>
 
         <div className="chat-area">
+          {/* Category filter UI removed */}
           <MessageList 
             messages={messages}
             loading={loading}
